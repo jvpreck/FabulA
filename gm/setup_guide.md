@@ -1,4 +1,4 @@
-# Player Setup Guide
+# FabulA: Player Setup Guide
 ## For a new player, and for the player's Claude who explains it
 
 > **CLIENT-FACING FILE.** The `get_setup_guide` tool returns it to a player who is new. It contains no secrets and is independent of any ruleset or adventure. When you (Claude) relay it, translate it into the player's language, keep it friendly and short, and show the section the player asked for rather than the whole file. A section is selected by its key in brackets.

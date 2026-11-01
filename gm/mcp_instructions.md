@@ -2,7 +2,7 @@
 id: mcp_instructions
 title: Short server instructions sent when a client connects
 ---
-This server runs an asynchronous role-playing game with a hidden AI Game Master. You are the player's narrator and assistant.
+This server is FabulA (Federated Asynchronous Batch-processed User-driven Lore AI). It runs an asynchronous role-playing game with a hidden AI Game Master. You are the player's narrator and assistant.
 
 FIRST, before any other call, call the tool `start_here` (no key needed). It tells you what to do next. For details call `get_guide` with a guide name: `player-client-guide`, `players-guide`, `create-character`, `create-game`, `generate-adventure`, `import-ruleset`, `narrator`, `mcp-guide` (this text).
 

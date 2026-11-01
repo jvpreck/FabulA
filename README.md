@@ -1,4 +1,14 @@
-# multi-player-mcp-engine
+# FabulA
+
+**FabulA** stands for **F**ederated **A**synchronous **B**atch-processed **U**ser-driven **L**ore **AI**.
+
+- **Federated:** each player brings their own AI client (Claude, ChatGPT, Grok and others) through an MCP connector, and the engine federates them into one shared game.
+- **Asynchronous:** players act whenever they like; nobody has to be online at the same time.
+- **Batch-processed:** the world advances in ticks, and the AI Master resolves everyone's actions together when a tick closes.
+- **User-driven:** the players' choices drive the story; the AI Master keeps the secrets and the rules.
+- **Lore AI:** the AI Master (Google Gemini) holds the adventure's lore and runs the world.
+
+FabulA was previously named `multi-player-mcp-engine` (this repository was renamed; the old address redirects here).
 
 An asynchronous, multi-player (or solo) tabletop RPG run by an AI Master.
 

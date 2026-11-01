@@ -1,4 +1,4 @@
--- Schema for the multi-player MCP engine. All tables are prefixed gm_ so they do not
+-- Schema for FabulA. All tables are prefixed gm_ so they do not
 -- clash with older tables (players, game_state). Each row holds one record as JSONB
 -- in `data`, plus index columns and a version for optimistic locking.
 -- Run in the Supabase SQL editor. The server uses the service role key (bypasses RLS).

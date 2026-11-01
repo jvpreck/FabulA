@@ -31,16 +31,21 @@ def client_instructions() -> str:
     return files.split_front_matter(files.gm_file("mcp_instructions.md"))[1]
 
 
+def _extra_hosts():
+    """More public host names the server answers on (a new Vercel domain or a custom domain), from the env var EXTRA_ALLOWED_HOSTS, comma separated."""
+    return [h.strip() for h in os.environ.get("EXTRA_ALLOWED_HOSTS", "").split(",") if h.strip()]
+
+
 def build_mcp(engine):
     mcp = FastMCP(
-        "multi-player-mcp-engine",
+        "FabulA",
         instructions=client_instructions(),
         stateless_http=True,
         json_response=True,
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
-            allowed_hosts=["multi-player-mcp-engine-sand.vercel.app", "localhost:*", "127.0.0.1:*"],
-            allowed_origins=["https://multi-player-mcp-engine-sand.vercel.app", "https://claude.ai"],
+            allowed_hosts=["multi-player-mcp-engine-sand.vercel.app", "localhost:*", "127.0.0.1:*", *_extra_hosts()],
+            allowed_origins=["https://multi-player-mcp-engine-sand.vercel.app", "https://claude.ai", *[f"https://{h}" for h in _extra_hosts()]],
         ),
     )
     tools.register(mcp, engine)

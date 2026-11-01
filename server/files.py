@@ -73,7 +73,7 @@ def _github_get(url: str, raw: bool = False) -> bytes:
     if not token:
         raise AdventureSourceError("GITHUB_TOKEN is not set, so the private adventures repository cannot be read")
     req = urllib.request.Request(url, headers={
-        "Authorization": f"Bearer {token}", "User-Agent": "multi-player-mcp-engine",
+        "Authorization": f"Bearer {token}", "User-Agent": "FabulA",
         "Accept": "application/vnd.github.raw+json" if raw else "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28"})
     try:

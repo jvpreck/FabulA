@@ -1,8 +1,8 @@
 ---
 id: guide_player_client
-title: Player client guide, how to use the engine
+title: Player client guide, how to use FabulA
 ---
-# How to use the engine (for you, the player's Claude or other assistant)
+# How to use FabulA (for you, the player's Claude or other assistant)
 
 ## The model of the engine
 
