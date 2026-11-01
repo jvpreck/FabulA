@@ -44,8 +44,8 @@ def build_mcp(engine):
         json_response=True,
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
-            allowed_hosts=["multi-player-mcp-engine-sand.vercel.app", "localhost:*", "127.0.0.1:*", *_extra_hosts()],
-            allowed_origins=["https://multi-player-mcp-engine-sand.vercel.app", "https://claude.ai", *[f"https://{h}" for h in _extra_hosts()]],
+            allowed_hosts=["fabula-rpg.vercel.app", "multi-player-mcp-engine-sand.vercel.app", "localhost:*", "127.0.0.1:*", *_extra_hosts()],
+            allowed_origins=["https://fabula-rpg.vercel.app", "https://multi-player-mcp-engine-sand.vercel.app", "https://claude.ai", *[f"https://{h}" for h in _extra_hosts()]],
         ),
     )
     tools.register(mcp, engine)
