@@ -12,6 +12,7 @@ This folder is in the public engine repository. Rules are not secret (adventures
 | File | Ruleset | Dice | Players |
 |---|---|---|---|
 | `fear_itself.md` | *Fear Itself* (GUMSHOE) horror: grounded by default, with an optional supernatural module (psychic powers, creatures), and house modules for perception drift, the antagonist ladder, belief states and time blocks | d6 | 1 to 5 |
+| `trail_of_cthulhu.md` | *Trail of Cthulhu* (GUMSHOE) Lovecraftian investigative horror in the 1930s, Purist or Pulp: Stability and Sanity, Drives, Pillars of Sanity, Mythos magic rules (the adventure supplies creatures, tomes and spells) | d6 | 1 to 5 |
 
 ## File format
 

@@ -41,7 +41,7 @@ An asynchronous, multi-player (or solo) tabletop RPG run by an AI Master.
 | Path | Contents |
 |---|---|
 | `gm/` | AI Master files, independent of any ruleset or adventure: `protocol.md`, `oracles.md`, `state_and_messages.md`; `client_tasks.md` (step-by-step instructions for the work packages, sent to the player's Claude); and `player_client_brief.md` for the player's Claude (served as MCP instructions) |
-| `rulesets/` | One markdown file per ruleset, with YAML front matter (`id`, `title`, ...). Currently `fear_itself.md` |
+| `rulesets/` | One markdown file per ruleset, with YAML front matter (`id`, `title`, ...). Currently `fear_itself.md` and `trail_of_cthulhu.md` |
 | `.github/workflows/admin.yml` | Host-only administration through GitHub Actions (needs write access to this repository) |
 | `server/admin.py` | The host commands behind `POST /internal/admin` |
 
