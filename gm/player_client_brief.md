@@ -130,6 +130,7 @@ When the player wants their character to say something to another character in t
 
 ## 10. Safety and honesty
 
+- **Gemini problems.** If a result has `gemini_unavailable: true`, or a `gm_notice` of kind `gemini_unavailable`, the AI Master's model (Google Gemini) is not answering. Tell the player plainly that there are problems with Gemini, that nothing was lost or changed, and that they can try again in a few minutes (a `gm_notice` means the server keeps retrying by itself and the result will arrive later). Never retry in a loop, never invent the result.
 - If the player says `pause` (or stops), send it to the server at once and stop the fiction. Follow the check-in.
 - There are no lines or veils: the players are adults and all content is possible. Narrate what the facts say, without softening or censoring it.
 - Never claim a secret or a rule you do not have. Say "nothing you have seen tells you that yet".

@@ -6,7 +6,7 @@ import pytest
 from server import config
 from server.db import MemoryStore
 from server.engine import Engine, EngineError
-from server.gm import GeminiGM, GMBusy, Usage
+from server.gm import GeminiGM, GMBusy, GMUnavailable, Usage
 from test_engine import ScriptedGM, standard_gm, start_solo, CHECK
 
 
@@ -191,16 +191,16 @@ def test_retries_stop_after_the_limit_then_the_strong_model_falls_back_to_light(
     assert g.calls == [config.GEMINI_MODEL_TICK] * (config.GEMINI_RETRIES + 1) + [config.GEMINI_MODEL_LIGHT]
     assert g.last["degraded"]
     g2 = FlakyGemini(usage(store, clock), [busy] * (config.GEMINI_RETRIES + 1))
-    with pytest.raises(RuntimeError):                # the light model has nowhere to fall back to
+    with pytest.raises(GMUnavailable):               # the light model has nowhere to fall back to: the player is told
         g2.call("s", "u")
 
 
 def test_quota_errors_timeouts_and_bugs_are_not_retried():
     store, clock = MemoryStore(), Clock()
-    for err in (RuntimeError("429 RESOURCE_EXHAUSTED"), RuntimeError("504 DEADLINE_EXCEEDED"), TimeoutError("timed out"),
-                ValueError("400 invalid argument")):
+    for err, outcome in ((RuntimeError("429 RESOURCE_EXHAUSTED"), GMUnavailable), (RuntimeError("504 DEADLINE_EXCEEDED"), GMUnavailable),
+                         (TimeoutError("timed out"), GMUnavailable), (ValueError("400 invalid argument"), ValueError)):
         g = FlakyGemini(usage(store, clock), [err])
-        with pytest.raises(type(err)):
+        with pytest.raises(outcome):
             g.call("s", "u")
         assert len(g.calls) == 1 and not g.pauses
 
@@ -209,7 +209,7 @@ def test_the_retry_wait_has_a_total_budget(monkeypatch):
     monkeypatch.setattr(config, "GEMINI_RETRY_BUDGET_SECONDS", 3)
     store, clock = MemoryStore(), Clock()
     g = FlakyGemini(usage(store, clock), [RuntimeError("503 UNAVAILABLE")] * 5)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(GMUnavailable):
         g.call("s", "u")
     assert len(g.calls) == 2 and len(g.pauses) == 1           # the 6 s second wait would exceed the budget
 
@@ -219,3 +219,54 @@ def test_an_error_with_a_status_code_attribute_counts():
         code = 503
     g = FlakyGemini(usage(MemoryStore(), Clock()), [ServerError("The service is overloaded")])
     assert g.call("s", "u") == "{}" and len(g.calls) == 2
+
+
+def test_gemini_that_keeps_failing_becomes_gm_unavailable():
+    store, clock = MemoryStore(), Clock()
+    busy = RuntimeError("503 UNAVAILABLE. high demand")
+    g = FlakyGemini(usage(store, clock), [busy] * 10)
+    with pytest.raises(GMUnavailable) as e:
+        g.call("s", "u")
+    assert "503" in e.value.reason
+    g2 = FlakyGemini(usage(store, clock), [ValueError("400 invalid argument")])
+    with pytest.raises(ValueError):                 # a real bug is still a bug, not "Gemini is down"
+        g2.call("s", "u")
+
+
+def test_a_player_action_tells_the_client_that_gemini_has_problems(world):
+    from server.tools import _safe
+    from server.engine import GeminiTrouble
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+
+    def down(system, user, tier="light"):
+        raise GMUnavailable("503 UNAVAILABLE")
+    gm.call = down
+    with pytest.raises(GeminiTrouble):
+        eng.submit_action("p_jorge", gid, "free_query", "Look around.", cid)
+    out = _safe(lambda: eng.submit_action("p_jorge", gid, "free_query", "Look around.", cid))()
+    assert out["gemini_unavailable"] is True and "Gemini" in out["error"] and "nothing was lost" in out["error"].lower()
+    assert "problems with Gemini" in out["next_step"]
+
+
+def test_a_tick_that_cannot_be_resolved_because_of_gemini_is_announced_and_then_clears(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    real = gm.call
+    state = {"down": True}
+
+    def call(system, user, tier="light"):
+        if state["down"]:
+            raise GMUnavailable("503 UNAVAILABLE")
+        return real(system, user, tier)
+    gm.call = call
+    out = eng.resolve_tick(gid)
+    assert out["resolved"] is False
+    g, _ = store.get("game", gid)
+    assert next(t for t in g["ticks"] if t["n"] == g["clock"]["tick"])["gm_trouble"]["since"]
+    res = eng.get_results("p_jorge")
+    notice = res["gm_notice"][0]
+    assert notice["kind"] == "gemini_unavailable" and notice["game_id"] == gid and "Gemini" in notice["message"]
+    state["down"] = False
+    assert eng.resolve_tick(gid)["resolved"] is True
+    assert "gm_notice" not in eng.get_results("p_jorge")

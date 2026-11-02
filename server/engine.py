@@ -12,7 +12,7 @@ from . import apply as ap
 from . import config, files, prompt, redact, tasks
 from .db import Conflict, Workspace, state_key
 from .dice import make_dice
-from .gm import GMBusy, GMError, parse
+from .gm import GMBusy, GMError, GMUnavailable, parse
 from .images import ImageError, fit_max, overlay_name
 
 PLAYER_KINDS = {"setup_answers", "character_submission", "character_confirm", "action", "standing_orders",
@@ -52,6 +52,18 @@ AUTO_PICTURE_SYSTEM = (
 
 class EngineError(Exception):
     pass
+
+
+GEMINI_TROUBLE_MESSAGE = ("The AI Master's model (Google Gemini) is not answering right now, even after several automatic retries. "
+                          "Nothing was lost and nothing was changed.")
+
+
+class GeminiTrouble(EngineError):
+    """Gemini is down or overloaded. The player has to be told so (the message says what to say)."""
+
+    def __init__(self, reason=""):
+        super().__init__(GEMINI_TROUBLE_MESSAGE)
+        self.reason = reason
 
 
 def iso(dt):
@@ -219,6 +231,8 @@ class Engine:
                 resp = parse(self.gm.call(system, json.dumps(env, ensure_ascii=False), tier=tier))
             except GMBusy as e:
                 raise EngineError(str(e))
+            except GMUnavailable as e:
+                raise GeminiTrouble(e.reason)
             except GMError as e:
                 errors, tries = [str(e)], tries + 1
                 continue
@@ -387,6 +401,25 @@ class Engine:
                         i["delivered"] = True
                     ws.touch("game", gid)
                     out["setup"].append({"game_id": gid, "items": [self._client_item(i) for i in items]})
+        notices = self._gemini_notices(ws, gids)
+        if notices:
+            out["gm_notice"] = notices
+        return out
+
+    def _gemini_notices(self, ws, gids):
+        """Games whose open tick could not be resolved because Gemini is not answering. The scheduler keeps trying every few minutes."""
+        out = []
+        for gid in gids:
+            g = ws.get("game", gid)
+            if not g or g.get("phase") != "active":
+                continue
+            n = (g.get("clock") or {}).get("tick")
+            ent = next((t for t in g.get("ticks", []) if t["n"] == n), None)
+            if ent and ent.get("gm_trouble"):
+                out.append({"game_id": gid, "kind": "gemini_unavailable", "since": ent["gm_trouble"]["since"],
+                            "message": "Tell the player: the AI Master's model (Google Gemini) is having problems, so the current tick has not been "
+                                       "resolved yet. Nothing is lost. The server keeps trying every few minutes and the result will arrive "
+                                       "in a later get_results call."})
         return out
 
     # ---------------------------------------------------------- illustrations
@@ -1583,6 +1616,9 @@ class Engine:
             if e2 and e2["status"] == "resolving":
                 e2["status"] = "open"
                 e2["last_error"] = str(e)[:500]
+                if isinstance(e, GeminiTrouble):  # the players are told on their next get_results
+                    prev = e2.get("gm_trouble") or {}
+                    e2["gm_trouble"] = {"since": prev.get("since") or iso(self.now()), "last": iso(self.now()), "reason": e.reason[:200]}
                 ws2.touch("game", game_id)
                 ws2.commit()
             if isinstance(e, (EngineError, Conflict)):
@@ -1602,6 +1638,7 @@ class Engine:
             ent = next(t for t in game["ticks"] if t["n"] == n)
             ent["status"] = "resolved"
             ent["resolved_at"] = iso(self.now())
+            ent.pop("gm_trouble", None)
             ent.pop("resolving_since", None)
             ent["span"] = ent.get("span")
             for c in by_id.values():

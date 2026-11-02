@@ -5,7 +5,7 @@ import json
 
 from mcp.server.fastmcp import Image
 
-from .engine import Engine, EngineError
+from .engine import Engine, EngineError, GeminiTrouble
 from .db import Conflict
 from .files import AdventureSourceError
 
@@ -27,6 +27,10 @@ def _safe(fn):
     def wrapper(*a, **kw):
         try:
             return fn(*a, **kw)
+        except GeminiTrouble as e:
+            return {"error": str(e), "gemini_unavailable": True, "retry_in_minutes": 5,
+                    "next_step": "Tell the player plainly that there are problems with Gemini (the AI Master's model), that nothing was lost "
+                                 "or changed, and to try the same thing again in a few minutes. Do not retry in a loop and do not invent a result."}
         except EngineError as e:
             return {"error": str(e), "next_step": _next_step(str(e))}
         except AdventureSourceError as e:

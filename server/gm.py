@@ -13,6 +13,15 @@ class GMBusy(Exception):
     """The AI Master cannot be called right now because of a quota. Nothing was sent. Try again later."""
 
 
+class GMUnavailable(Exception):
+    """Gemini did not answer after the automatic retries (overloaded, down, over its own quota or too slow). Nothing was applied.
+    The player must be told that Gemini has problems and that nothing was lost."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
 class Usage:
     """Counts requests per tier, per day (provider day, Pacific time) and per minute, in the database, so that all server instances share it."""
 
@@ -104,7 +113,7 @@ class GeminiGM:
     @staticmethod
     def _retryable(e):
         m = f"{type(e).__name__} {e}".lower()
-        return any(x in m for x in ("429", "resource_exhausted", "quota", "500", "502", "503", "504", "unavailable", "overloaded", "deadline"))
+        return any(x in m for x in ("429", "resource_exhausted", "quota", "500", "502", "503", "504", "unavailable", "overloaded", "high demand", "deadline", "timeout", "timed out"))
 
     @staticmethod
     def _transient(e):
@@ -157,7 +166,12 @@ class GeminiGM:
         if r != "ok":
             raise GMBusy("the AI Master is busy right now (request quota). Please try again in a few minutes"
                          if r == "minute" else "the AI Master has reached its daily request quota. Please try again tomorrow")
-        out = self._generate_retrying(config.GEMINI_MODEL_LIGHT, config.GEMINI_THINKING_LEVEL, system, user)
+        try:
+            out = self._generate_retrying(config.GEMINI_MODEL_LIGHT, config.GEMINI_THINKING_LEVEL, system, user)
+        except Exception as e:
+            if self._retryable(e):  # overloaded, unavailable, quota or timeout: Gemini is not answering
+                raise GMUnavailable(type(e).__name__ + ": " + str(e)[:200]) from e
+            raise
         self.last = {"tier": "light", "model": config.GEMINI_MODEL_LIGHT, "degraded": degraded}
         return out
 
