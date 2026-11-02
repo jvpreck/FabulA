@@ -157,3 +157,65 @@ def test_light_quota_error_reaches_the_player_as_a_plain_message(world):
     with pytest.raises(EngineError) as e:
         eng.submit_action("p_jorge", gid, "free_query", "hello", cid)
     assert "busy" in str(e.value)
+
+
+class FlakyGemini(GeminiGM):
+    """Fails with the given errors in order, then answers. Records the pauses instead of sleeping."""
+
+    def __init__(self, usage, errors):
+        super().__init__(usage=usage, sleep=lambda s: self.pauses.append(s))
+        self.errors, self.calls, self.pauses = list(errors), [], []
+
+    def _generate(self, model, level, system, user):
+        self.calls.append(model)
+        if self.errors:
+            raise self.errors.pop(0)
+        return "{}"
+
+
+def test_a_503_high_demand_is_retried_quietly_with_backoff():
+    store, clock = MemoryStore(), Clock()
+    busy = RuntimeError("503 UNAVAILABLE. {'error': {'message': 'This model is currently experiencing high demand.'}}")
+    g = FlakyGemini(usage(store, clock), [busy, busy])
+    assert g.call("s", "u") == "{}"
+    assert len(g.calls) == 3 and len(g.pauses) == 2
+    assert 2 <= g.pauses[0] < 3 and 6 <= g.pauses[1] < 7.6      # base, then 3x base, with a little jitter
+    assert g.last["degraded"] is None
+
+
+def test_retries_stop_after_the_limit_then_the_strong_model_falls_back_to_light():
+    store, clock = MemoryStore(), Clock()
+    busy = RuntimeError("503 UNAVAILABLE")
+    g = FlakyGemini(usage(store, clock), [busy] * (config.GEMINI_RETRIES + 1))
+    g.call("s", "u", tier="tick")
+    assert g.calls == [config.GEMINI_MODEL_TICK] * (config.GEMINI_RETRIES + 1) + [config.GEMINI_MODEL_LIGHT]
+    assert g.last["degraded"]
+    g2 = FlakyGemini(usage(store, clock), [busy] * (config.GEMINI_RETRIES + 1))
+    with pytest.raises(RuntimeError):                # the light model has nowhere to fall back to
+        g2.call("s", "u")
+
+
+def test_quota_errors_timeouts_and_bugs_are_not_retried():
+    store, clock = MemoryStore(), Clock()
+    for err in (RuntimeError("429 RESOURCE_EXHAUSTED"), RuntimeError("504 DEADLINE_EXCEEDED"), TimeoutError("timed out"),
+                ValueError("400 invalid argument")):
+        g = FlakyGemini(usage(store, clock), [err])
+        with pytest.raises(type(err)):
+            g.call("s", "u")
+        assert len(g.calls) == 1 and not g.pauses
+
+
+def test_the_retry_wait_has_a_total_budget(monkeypatch):
+    monkeypatch.setattr(config, "GEMINI_RETRY_BUDGET_SECONDS", 3)
+    store, clock = MemoryStore(), Clock()
+    g = FlakyGemini(usage(store, clock), [RuntimeError("503 UNAVAILABLE")] * 5)
+    with pytest.raises(RuntimeError):
+        g.call("s", "u")
+    assert len(g.calls) == 2 and len(g.pauses) == 1           # the 6 s second wait would exceed the budget
+
+
+def test_an_error_with_a_status_code_attribute_counts():
+    class ServerError(Exception):
+        code = 503
+    g = FlakyGemini(usage(MemoryStore(), Clock()), [ServerError("The service is overloaded")])
+    assert g.call("s", "u") == "{}" and len(g.calls) == 2

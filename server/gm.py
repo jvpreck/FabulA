@@ -74,13 +74,15 @@ class GeminiGM:
     """Routes each request to a tier. `tick` (strong) is used for closing a tick and checking a character; everything else is `light`.
     If the strong model's daily quota is used up, or it fails with a quota or server error, the request goes to the light model and
     `last["degraded"]` says so. If the strong model is only over its per-minute limit, the request is deferred (GMBusy) and the
-    scheduler tries again on its next run. If the light model is out of quota, GMBusy tells the player to try later."""
+    scheduler tries again on its next run. If the light model is out of quota, GMBusy tells the player to try later.
+    A transient server error (503 "high demand", 500, 502, 504) is retried quietly with backoff before any of that (`_generate_retrying`)."""
 
-    def __init__(self, api_key=None, usage=None):
+    def __init__(self, api_key=None, usage=None, sleep=None):
         self._client = None
         self._api_key = api_key
         self.usage = usage
         self.last = {}
+        self._sleep = sleep or __import__("time").sleep
 
     def _get(self):
         if self._client is None:
@@ -104,6 +106,36 @@ class GeminiGM:
         m = f"{type(e).__name__} {e}".lower()
         return any(x in m for x in ("429", "resource_exhausted", "quota", "500", "502", "503", "504", "unavailable", "overloaded", "deadline"))
 
+    @staticmethod
+    def _transient(e):
+        """A short-lived server-side failure (503 "high demand", 500, 502, 504) that is worth retrying quietly.
+        Quota errors (429) and timeouts are NOT transient: a retry would not help or would outlive the function."""
+        code = getattr(e, "code", None) or getattr(e, "status_code", None)
+        if code in (500, 502, 503, 504):
+            return True
+        m = f"{type(e).__name__} {e}".lower()
+        if any(x in m for x in ("429", "resource_exhausted", "quota", "deadline", "timeout", "timed out")):
+            return False
+        return bool(re.search(r"\b(500|502|503|504)\b", m)) or any(x in m for x in ("unavailable", "overloaded", "high demand", "internal error"))
+
+    def _generate_retrying(self, model, level, system, user):
+        """One model call, retried with exponential backoff and jitter on transient errors, within a total waiting budget."""
+        import random
+        waited = 0.0
+        attempt = 0
+        while True:
+            try:
+                return self._generate(model, level, system, user)
+            except Exception as e:
+                if attempt >= config.GEMINI_RETRIES or not self._transient(e):
+                    raise
+                delay = config.GEMINI_RETRY_BASE_SECONDS * (3 ** attempt) * (1 + random.random() * 0.25)
+                if waited + delay > config.GEMINI_RETRY_BUDGET_SECONDS:
+                    raise
+                self._sleep(delay)
+                waited += delay
+                attempt += 1
+
     def call(self, system: str, user: str, tier: str = "light") -> str:
         degraded = None
         if tier == "tick":
@@ -112,7 +144,7 @@ class GeminiGM:
                 raise GMBusy("the strong AI Master model is at its per-minute limit; the tick will be retried shortly")
             if r == "ok":
                 try:
-                    out = self._generate(config.GEMINI_MODEL_TICK, config.GEMINI_THINKING_LEVEL_TICK, system, user)
+                    out = self._generate_retrying(config.GEMINI_MODEL_TICK, config.GEMINI_THINKING_LEVEL_TICK, system, user)
                     self.last = {"tier": "tick", "model": config.GEMINI_MODEL_TICK, "degraded": None}
                     return out
                 except Exception as e:
@@ -125,7 +157,7 @@ class GeminiGM:
         if r != "ok":
             raise GMBusy("the AI Master is busy right now (request quota). Please try again in a few minutes"
                          if r == "minute" else "the AI Master has reached its daily request quota. Please try again tomorrow")
-        out = self._generate(config.GEMINI_MODEL_LIGHT, config.GEMINI_THINKING_LEVEL, system, user)
+        out = self._generate_retrying(config.GEMINI_MODEL_LIGHT, config.GEMINI_THINKING_LEVEL, system, user)
         self.last = {"tier": "light", "model": config.GEMINI_MODEL_LIGHT, "degraded": degraded}
         return out
 
