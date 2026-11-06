@@ -141,6 +141,8 @@ An adventure file or a stored adventure defines its own NPCs and locations, with
   "ruleset_id": "example_ruleset",
   "settings": {
     "tick_interval_hours": 24,
+    "tick_close_hour": 3,
+    "tick_timezone": "Europe/Madrid",
     "tick_span": "day",
     "early_close": false,
     "pvp": "soft",
@@ -780,6 +782,7 @@ Apply when a player or the host does not answer, or at the setup deadline.
 | Setting | Default |
 |---|---|
 | `tick_interval_hours` | 24 |
+| `tick_close_hour` | 3 (03:00 in `tick_timezone`, default `Europe/Madrid`; only for ticks of whole days; -1 = exactly one interval after opening) |
 | `tick_span` | `day` (four Blocks) |
 | `early_close` | `true` for solo, `false` for party |
 | `pvp` | `soft` |

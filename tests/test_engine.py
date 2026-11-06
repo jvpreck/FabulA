@@ -121,7 +121,7 @@ def new_game(eng, player, adv=ADV, language=None, settings=None):
     out = eng.create_game(player, adv, language=language, settings=settings)
     pkg = out["package"]
     s = settings or {}
-    return eng.submit_package(player, pkg["task_id"], game_pkg(**{k: v for k, v in s.items() if k in ("lethality", "pvp", "tick_span", "tick_interval_hours", "visibility", "illustrations", "image_style")}))
+    return eng.submit_package(player, pkg["task_id"], game_pkg(**{k: v for k, v in s.items() if k in ("lethality", "pvp", "tick_span", "tick_interval_hours", "tick_close_hour", "tick_timezone", "visibility", "illustrations", "image_style")}))
 
 
 def char_pkg(name="Iris Calder", concept="a reporter", **kw):
@@ -731,3 +731,44 @@ def test_an_answer_cannot_move_the_clock_to_another_tick(world):
     g1, _ = store.get("game", gid)
     c1, _ = store.get("character", cid)
     assert g1["clock"]["tick"] == t0 and c1["tick_state"]["tick"] == t0
+
+
+def test_tick_closing_hour_defaults_to_3am_madrid_and_is_configurable():
+    from server.engine import Engine
+    utc = timezone.utc
+    # opened 23:54 Madrid: the first 03:00 Madrid at or after twelve hours later
+    assert Engine._tick_closes(datetime(2026, 11, 6, 22, 54, tzinfo=utc), {"tick_interval_hours": 24}) == datetime(2026, 11, 8, 2, 0, tzinfo=utc)
+    # opened right after the previous 03:00 (02:05 UTC = 03:05 Madrid): the next 03:00 is almost exactly 24 hours later
+    assert Engine._tick_closes(datetime(2026, 11, 7, 2, 5, tzinfo=utc), {"tick_interval_hours": 24}) == datetime(2026, 11, 8, 2, 0, tzinfo=utc)
+    # summer time: 03:00 Madrid is 01:00 UTC
+    assert Engine._tick_closes(datetime(2026, 7, 7, 1, 5, tzinfo=utc), {"tick_interval_hours": 24}) == datetime(2026, 7, 8, 1, 0, tzinfo=utc)
+    # another hour and timezone, midnight included
+    s = {"tick_interval_hours": 24, "tick_close_hour": 0, "tick_timezone": "UTC"}
+    assert Engine._tick_closes(datetime(2026, 11, 7, 0, 3, tzinfo=utc), s) == datetime(2026, 11, 8, 0, 0, tzinfo=utc)
+    # 48 hours: still a fixed hour, about two days later
+    assert Engine._tick_closes(datetime(2026, 11, 7, 2, 5, tzinfo=utc), {"tick_interval_hours": 48}) == datetime(2026, 11, 9, 2, 0, tzinfo=utc)
+    # no fixed hour, or a time step that is not whole days: exactly one interval
+    t0 = datetime(2026, 11, 7, 9, 17, tzinfo=utc)
+    assert Engine._tick_closes(t0, {"tick_interval_hours": 24, "tick_close_hour": -1}) == t0 + timedelta(hours=24)
+    assert Engine._tick_closes(t0, {"tick_interval_hours": 6}) == t0 + timedelta(hours=6)
+
+
+def test_game_creation_takes_the_closing_hour(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    g, _ = store.get("game", gid)
+    assert g["settings"]["tick_close_hour"] == 3 and g["settings"]["tick_timezone"] == "Europe/Madrid"
+    assert g["clock"]["tick_closes"].endswith("Z")
+    closes = datetime.fromisoformat(g["clock"]["tick_closes"].replace("Z", "+00:00"))
+    assert closes.hour == 2 and closes.minute == 0   # 03:00 Madrid in winter
+
+
+def test_a_player_can_choose_the_closing_hour_and_bad_values_are_rejected(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)  # default game, for the helpers
+    out = new_game(eng, "p_ana", settings={"tick_close_hour": 0, "tick_timezone": "UTC"})
+    g, _ = store.get("game", out["game_id"])
+    assert g["settings"]["tick_close_hour"] == 0 and g["settings"]["tick_timezone"] == "UTC"
+    pkg = eng.create_game("p_ana", ADV)["package"]
+    bad = eng.submit_package("p_ana", pkg["task_id"], game_pkg(tick_close_hour=24, tick_timezone="Mars/Olympus"))
+    assert not bad.get("accepted", True) and any("tick_close_hour" in p for p in bad["problems"]) and any("tick_timezone" in p for p in bad["problems"])

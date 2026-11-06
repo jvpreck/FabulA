@@ -28,6 +28,8 @@ GEMINI_LIMITS = {
     # references is about 120, a 512 reference about 26. Calls per day are kept low enough for a mix of both.
     "image": {"rpd": int(os.environ.get("IMAGE_RPD", "80")), "rpm": int(os.environ.get("IMAGE_RPM", "10"))},
 }
+TICK_TIMEZONE = os.environ.get("TICK_TIMEZONE", "Europe/Madrid")  # where "the hour a tick closes" is counted
+TICK_CLOSE_HOUR = int(os.environ.get("TICK_CLOSE_HOUR", "3"))  # default hour (0-23) for games whose tick is a whole number of days; -1 = exactly one interval after opening
 GEMINI_QUOTA_TZ = "America/Los_Angeles"  # provider quotas reset at midnight Pacific
 QUOTA_TZ = {"tick": GEMINI_QUOTA_TZ, "light": GEMINI_QUOTA_TZ, "image": "UTC"}  # Cloudflare's free allowance resets at 00:00 UTC
 

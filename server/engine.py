@@ -7,6 +7,7 @@ import secrets
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from . import apply as ap
 from . import config, files, prompt, redact, tasks
@@ -336,10 +337,29 @@ class Engine:
         a.bump_versions(by_id)
 
     # ------------------------------------------------------- tick bookkeeping
+    @staticmethod
+    def _tick_closes(opens, s):
+        """When a tick that opens now closes. A tick of a whole number of days closes at a fixed hour of the day in the game's timezone
+        (default 03:00 Madrid): the first such hour at or after (interval - 12 hours) from now, so the usual tick lasts one interval.
+        Other intervals, or tick_close_hour -1, close exactly one interval after opening."""
+        hours = s.get("tick_interval_hours") or 24
+        hour = s.get("tick_close_hour", config.TICK_CLOSE_HOUR)
+        if hour is None or hour < 0 or hours % 24:
+            return opens + timedelta(hours=hours)
+        try:
+            tz = ZoneInfo(s.get("tick_timezone") or config.TICK_TIMEZONE)
+        except Exception:
+            return opens + timedelta(hours=hours)
+        earliest = (opens + timedelta(hours=hours - 12)).astimezone(tz)
+        closes = earliest.replace(hour=hour, minute=0, second=0, microsecond=0)
+        if closes < earliest:
+            closes += timedelta(days=1)  # wall-clock arithmetic: stays at the same local hour across daylight saving changes
+        return closes.astimezone(timezone.utc)
+
     def _open_tick(self, ws, game, n):
         s = game["settings"]
         opens = self.now()
-        closes = opens + timedelta(hours=s.get("tick_interval_hours", 24))
+        closes = self._tick_closes(opens, s)
         game["clock"]["tick"] = n
         game["clock"]["tick_opens"] = iso(opens)
         game["clock"]["tick_closes"] = iso(closes)
@@ -990,6 +1010,7 @@ class Engine:
             host = ws.get("player", g.get("host_player_id"))
             row = {"game_id": g["id"], "title": g.get("title"), "adventure": adv.get("title"), "era": adv.get("era"), "phase": g.get("phase"),
                    "players": f"{len(g.get('roster', []))}/{maxp}", "tick_interval_hours": (g.get("settings") or {}).get("tick_interval_hours"),
+                   "tick_close_hour": (g.get("settings") or {}).get("tick_close_hour"), "tick_timezone": (g.get("settings") or {}).get("tick_timezone"),
                    "lethality": (g.get("settings") or {}).get("lethality"), "pvp": (g.get("settings") or {}).get("pvp"),
                    "language": g.get("language"), "host": (host or {}).get("display_name"), "tick": (g.get("clock") or {}).get("tick")}
             if joined:
@@ -1127,6 +1148,7 @@ class Engine:
             raise EngineError(f"the adventure needs ruleset {adv.get('ruleset_id')}, which this server does not have")
         rec = adv.get("recommended") or {}
         s = {"tick_interval_hours": rec.get("tick_interval_hours", 24), "tick_span": rec.get("tick_span", "day"),
+             "tick_close_hour": rec.get("tick_close_hour", config.TICK_CLOSE_HOUR), "tick_timezone": config.TICK_TIMEZONE,
              "early_close": None, "pvp": "soft", "visibility": "private", "illustrations": "off", "image_style": None, "lethality": rec.get("lethality", "high"),
              "tone_preset": None, "modules": [], "setup_deadline": iso(self.now() + timedelta(days=3)),
              "crisis": {"active": False, "tick_span": "beat", "tick_interval_hours": 24}}
@@ -1251,6 +1273,8 @@ class Engine:
                         "lethality": (params.get("settings") or {}).get("lethality") or rec.get("lethality", "high"),
                         "tick_interval_hours": (params.get("settings") or {}).get("tick_interval_hours") or rec.get("tick_interval_hours", 24),
                         "tick_span": (params.get("settings") or {}).get("tick_span") or rec.get("tick_span", "day"),
+                        "tick_close_hour": (lambda v: rec.get("tick_close_hour", config.TICK_CLOSE_HOUR) if v is None else v)((params.get("settings") or {}).get("tick_close_hour")),
+                        "tick_timezone": (params.get("settings") or {}).get("tick_timezone") or config.TICK_TIMEZONE,
                         "pvp": (params.get("settings") or {}).get("pvp") or "soft", "visibility": "private", "illustrations": "on" if self._images_available() else "off"}
             ctx = tasks.game_context(adv, defaults, self._images_available())
         elif kind == "generate_character":
@@ -1336,6 +1360,10 @@ class Engine:
             if problems:
                 return reject(problems)
             s = {k: package[k] for k in ("lethality", "tick_span", "tick_interval_hours", "pvp", "visibility", "illustrations", "image_style") if package.get(k)}
+            if package.get("tick_close_hour") is not None:  # 0 (midnight) and -1 (no fixed hour) are real values
+                s["tick_close_hour"] = package["tick_close_hour"]
+            if package.get("tick_timezone"):
+                s["tick_timezone"] = package["tick_timezone"].strip()
             if isinstance(s.get("image_style"), str):
                 s["image_style"] = s["image_style"].strip()
             if "illustrations" not in s and self._images_available():

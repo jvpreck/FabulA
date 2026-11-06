@@ -60,5 +60,5 @@ def game_summary(game: dict) -> dict:
     s = game.get("settings") or {}
     return {"id": game["id"], "title": game.get("title"), "phase": game.get("phase"), "format": game.get("format"),
             "adventure_id": game.get("adventure_id"), "ruleset_id": game.get("ruleset_id"),
-            "settings": {k: s.get(k) for k in ("tick_interval_hours", "tick_span", "early_close", "pvp", "lethality", "illustrations")},
+            "settings": {k: s.get(k) for k in ("tick_interval_hours", "tick_close_hour", "tick_timezone", "tick_span", "early_close", "pvp", "lethality", "illustrations")},
             "clock": game.get("clock"), "roster": game.get("roster", [])}

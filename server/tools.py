@@ -118,11 +118,17 @@ def register(mcp, engine: Engine):
     @mcp.tool()
     @_safe
     def create_game(player_key: str, adventure_id: str, title: str = "", language: str = "", display_name: str = "",
-                    lethality: str = "", tick_interval_hours: int = 0, tick_span: str = "", pvp: str = "", visibility: str = "") -> dict:
+                    lethality: str = "", tick_interval_hours: int = 0, tick_span: str = "", pvp: str = "", visibility: str = "",
+                    tick_close_hour: int = -2, tick_timezone: str = "") -> dict:
         """Start a new game run from an adventure. Returns a work package that collects the settings (lethality low, moderate or high; the default is high,
-        tick interval, pvp, language, visibility private or open) with the player; then send the result with submit_package. Optional arguments prefill defaults."""
+        tick interval, the hour of the day a tick closes, pvp, language, visibility private or open) with the player; then send the result with submit_package.
+        tick_close_hour is 0 to 23 (hour of the day in tick_timezone, default Europe/Madrid, at which a tick of whole days closes; the default is 3, in the middle of
+        the night) or -1 for no fixed hour. Optional arguments prefill defaults."""
         s = {k: v for k, v in {"lethality": lethality, "tick_interval_hours": tick_interval_hours or None,
-                               "tick_span": tick_span, "pvp": pvp, "visibility": visibility}.items() if v}
+                               "tick_span": tick_span, "pvp": pvp, "visibility": visibility,
+                               "tick_timezone": tick_timezone}.items() if v}
+        if tick_close_hour != -2:
+            s["tick_close_hour"] = tick_close_hour
         return engine.create_game(engine.authenticate(player_key), adventure_id, title or None, language or None, s, display_name or None)
 
     @mcp.tool()

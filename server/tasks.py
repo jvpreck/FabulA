@@ -114,7 +114,8 @@ def game_context(adventure, defaults, images_available=False):
                           "recommended": adventure.get("recommended"),
                           "language": adventure.get("language")},
             "ruleset_id": adventure.get("ruleset_id"), "defaults": defaults,
-            "options": {"lethality": ["low", "moderate", "high"], "tick_span": ["day", "block"], "pvp": ["none", "soft", "full"], "visibility": ["private", "open"],
+            "options": {"lethality": ["low", "moderate", "high"], "tick_span": ["day", "block"],
+                        "tick_close_hour": "0 to 23 = the hour of the day (in tick_timezone) at which a tick of a whole number of days closes; -1 = exactly one interval after it opens", "pvp": ["none", "soft", "full"], "visibility": ["private", "open"],
                         "illustrations": ["off", "on"] if images_available else ["off"]},
             "explanations": {"lethality": lethality_help()}}
 
@@ -240,6 +241,16 @@ def validate_game(p, adventure, images_available=False):
     h = p.get("tick_interval_hours", 24)
     if not isinstance(h, int) or not (1 <= h <= 168):
         problems.append("tick_interval_hours must be 1 to 168")
+    ch = p.get("tick_close_hour")
+    if ch is not None and (isinstance(ch, bool) or not isinstance(ch, int) or not (-1 <= ch <= 23)):
+        problems.append("tick_close_hour must be -1 (no fixed hour) or an hour from 0 to 23")
+    tzn = p.get("tick_timezone")
+    if tzn:
+        try:
+            from zoneinfo import ZoneInfo
+            ZoneInfo(str(tzn).strip())
+        except Exception:
+            problems.append("tick_timezone must be an IANA timezone name such as Europe/Madrid")
     if p.get("pvp", "soft") not in ("none", "soft", "full"):
         problems.append("pvp must be none, soft or full")
     ill = p.get("illustrations") or ("on" if images_available else "off")  # on by default when the server can draw

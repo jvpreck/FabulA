@@ -109,7 +109,7 @@ The server creates the game and sends you `game_created`. Ask through `prompts` 
 **Shared settings** (the host, meaning the player who created the game, answers; other players may object once during setup, and any safety objection wins):
 
 1. **Adventure.** The game already has an adventure when it is created, chosen by the host. It may be a file, or one a player's client generated or converted (§16.5). Do not offer to change it.
-2. **Time step.** `tick_interval_hours` (default 24), `tick_span` (default `day`; or `block`), and `early_close` (resolve as soon as every active player has submitted everything they intend, default true for solo, false for party).
+2. **Time step.** `tick_interval_hours` (default 24), `tick_close_hour` and `tick_timezone` (a tick of a whole number of days closes at that hour of the day, default 03:00 Europe/Madrid; -1 means exactly one interval after it opens), `tick_span` (default `day`; or `block`), and `early_close` (resolve as soon as every active player has submitted everything they intend, default true for solo, false for party).
 3. **PvP stance.** `none`, `soft` (default) or `full`.
 4. **Lethality.** `low`, `moderate` or `high` (default). Explain it in one plain sentence each (§6.5).
 5. **Tone and modules.** The adventure's defaults. The host may change them only if the adventure allows.
