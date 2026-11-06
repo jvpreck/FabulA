@@ -270,3 +270,25 @@ def test_a_tick_that_cannot_be_resolved_because_of_gemini_is_announced_and_then_
     state["down"] = False
     assert eng.resolve_tick(gid)["resolved"] is True
     assert "gm_notice" not in eng.get_results("p_jorge")
+
+
+def test_writes_to_server_owned_fields_are_dropped_not_rejected():
+    from server.apply import Applier
+
+    class WS:
+        def __init__(self):
+            self.d = {("character", "c1"): {"id": "c1", "game_id": "g1", "events": [], "hp": 5}}
+        def get(self, kind, id_, create=None):
+            return self.d.get((kind, id_))
+        def touch(self, *a):
+            pass
+    ws = WS()
+    ap = Applier(ws, "g1", "resolve_tick", "2026-01-01T00:00:00Z")
+    ap.apply_ops([
+        {"op": "append", "entity": "character", "id": "c1", "path": "events", "doc": {"summary": "x"}},   # the GM's usual mistake
+        {"op": "merge", "entity": "character", "id": "c1", "patch": {"events": [1], "hp": 4}},
+        {"op": "adjust", "entity": "character", "id": "c1", "path": "hp", "delta": -1},
+    ])
+    c = ws.d[("character", "c1")]
+    assert c["events"] == [] and c["hp"] == 3          # server-owned writes dropped, the rest applied
+    assert len(ap.ignored) == 2

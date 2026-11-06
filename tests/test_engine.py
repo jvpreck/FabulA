@@ -280,7 +280,27 @@ def test_party_witness_say_and_privacy(world):
         eng.submit_action("p_ana", gid, "action", "search x", a)
 
 
-def test_gm_response_with_forbidden_write_is_rejected_then_retried(world):
+def test_gm_response_with_server_owned_write_is_accepted_and_the_write_dropped(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    state = {"n": 0}
+
+    def rule(env, n):
+        r = base()
+        state["n"] += 1
+        r["handling"] = "answered"
+        r["results"][cid] = [item("ok")]
+        r["state_changes"] = [{"op": "append", "entity": "character", "id": cid, "path": "events", "doc": {"summary": "x"}},
+                              {"op": "append", "entity": "character", "id": cid, "path": "inbox", "doc": {"x": 1}}]
+        return r
+    eng.gm.rule = rule
+    r = eng.submit_action("p_jorge", gid, "free_query", "what do I know?", cid)
+    assert state["n"] == 1 and r["handling"] == "answered"      # no retry, nothing to fix
+    c, _ = store.get("character", cid)
+    assert all("x" not in i for i in c["inbox"]) and all(e.get("summary") != "x" for e in c["events"])
+
+
+def test_gm_response_with_invalid_write_is_rejected_then_retried(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng)
     state = {"n": 0}
@@ -289,7 +309,7 @@ def test_gm_response_with_forbidden_write_is_rejected_then_retried(world):
         r = base()
         state["n"] += 1
         if state["n"] == 1:
-            r["state_changes"] = [{"op": "append", "entity": "character", "id": cid, "path": "inbox", "doc": {"x": 1}}]
+            r["state_changes"] = [{"op": "bogus", "entity": "character", "id": cid, "path": "hp"}]
         else:
             assert "previous_errors" in env
             r["handling"] = "answered"

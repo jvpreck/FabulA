@@ -100,6 +100,7 @@ class Applier:
         self.now = now_iso
         self.adv_scope = allow_definitions_for_adventure
         self.touched = set()
+        self.ignored = []  # writes to server-owned fields that were dropped instead of rejected
         self.before_alive = {}
 
     # -- entity access -------------------------------------------------
@@ -156,17 +157,18 @@ class Applier:
         if kind == "merge":
             patch = op["patch"]
             bad = set(patch) & top_forbidden
+            if bad:  # the server writes these itself (events, decisions, inbox...): drop them, keep the rest
+                self.ignored.append(f"{entity} {id_}: fields {sorted(bad)}")
+                patch = {k: v for k, v in patch.items() if k not in bad}
             if entity == "game" and "inbox" in (patch.get("setup") or {}):
-                raise ApplyError("setup.inbox is server-owned")
-            if bad:
-                raise ApplyError(f"fields {sorted(bad)} are server-owned")
+                self.ignored.append(f"{entity} {id_}: setup.inbox")
+                patch = {**patch, "setup": {k: v for k, v in patch["setup"].items() if k != "inbox"}}
             deep_merge(doc, patch)
         else:
             path = op["path"]
-            if path.split(".")[0] in top_forbidden:
-                raise ApplyError(f"path {path} is server-owned")
-            if entity == "game" and path.startswith("setup.inbox"):
-                raise ApplyError("setup.inbox is server-owned")
+            if path.split(".")[0] in top_forbidden or (entity == "game" and path.startswith("setup.inbox")):
+                self.ignored.append(f"{entity} {id_}: path {path}")  # server-owned: the response fields already carry it
+                return
             if kind == "adjust":
                 cont, last = _walk(doc, path)
                 cur = _get_leaf(cont, last)
