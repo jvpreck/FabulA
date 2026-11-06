@@ -157,7 +157,11 @@ def test_draw_deliver_list_and_ask_again(world):
     first = eng.get_results("p_a", gid)
     assert iid in [i["image_id"] for i in first["illustrations"]] and {i["kind"] for i in first["illustrations"]} == {"scene", "portrait"}
     assert [i for i in first["illustrations"] if i["image_id"] == iid][0]["caption"] == "The road to the hill"
-    assert eng.get_results("p_a", gid)["illustrations"] == []
+    for i in first["illustrations"]:                                            # each one comes with a ready link, so the client can list it at once
+        assert i["link_text"] == "Illustration: " + i["caption"] and i["url"].endswith(f"expires_in={config.IMAGE_URL_TTL_SECONDS}")
+    assert first["illustrations_older"] == 0
+    again = eng.get_results("p_a", gid)
+    assert again["illustrations"] == [] and again["illustrations_older"] == 2   # the section can still mention the earlier pictures
     # asking for it gives a short-lived link, and again gives another, also later in time
     a = eng.get_image("p_a", gid, iid)
     assert a["link_text"] == "Illustration: The road to the hill"
@@ -479,3 +483,9 @@ def test_a_place_the_model_could_not_describe_is_not_asked_again(world):
     n = len(AUTO["calls"])
     eng.submit_action("p_a", gid, "free_query", "where am I", cid)
     assert len(AUTO["calls"]) == n
+
+
+def test_the_narration_brief_asks_for_an_illustrations_available_section():
+    from server.engine import NARRATION_BRIEF
+    assert "Illustrations available" in NARRATION_BRIEF and "illustrations_older" in NARRATION_BRIEF and "pending_illustrations" in NARRATION_BRIEF
+    assert NARRATION_BRIEF.index("notebook entry and status") < NARRATION_BRIEF.index("Illustrations available") < NARRATION_BRIEF.index("next prompt with the possible actions")

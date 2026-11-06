@@ -34,7 +34,12 @@ NARRATION_BRIEF = (
     "several paragraphs): first the setting (place, year, the season and hour, a short historical or social background that bears on "
     "the adventure), then the character (background, profession, how they look, what drives them, who they care about), using only the "
     "facts, then the scene. Offer the character's portrait when the illustrations list has one. "
-    "If pending_illustrations is above 0, tell the player in one line that a picture is still being drawn and will be listed the next time results are fetched. "
+    "SECTIONS AFTER THE NARRATION, always in this order, in plain text outside the blockquote: the notebook entry and status; then, whenever "
+    "the result has illustrations, illustrations_older above 0 or pending_illustrations above 0, a section headed **Illustrations available**; then the next prompt with the possible actions, last. "
+    "In the Illustrations available section list each entry of `illustrations` on its own line as a markdown link [link_text](url) (link_text already starts with \"Illustration: \"; "
+    "if an entry has no url, call get_image for it), saying whether it is a portrait or a scene. Then, in one short line each: how many earlier pictures can be listed "
+    "(illustrations_older: the player can ask for them, and you call list_images), and that a picture is still being drawn (pending_illustrations), to be listed the next time results are fetched. "
+    "Leave the section out only when all three are empty. Never describe a picture, and never put these links in the artifacts. "
     "ILLUSTRATIONS: when you link a picture, the link text is a caption of what it shows, prefixed with \"Illustration: \", for example [Illustration: the lamp-lit ward at night](url)."
 )
 
@@ -387,6 +392,9 @@ class Engine:
             out["deliveries"].append({"game_id": c["game_id"], "character_id": c["id"], "items": [self._client_item(i) for i in items],
                                       "sync": redact.sync_block(g, c, allc)})
         out["illustrations"] = self._new_illustrations(ws, player_id, chars, mark)
+        new_ids = {i["image_id"] for i in out["illustrations"]}
+        out["illustrations_older"] = len({im["id"] for c in chars for im in ws.find("image", game_id=c["game_id"], status="ready")
+                                          if c["id"] in im["visible_to"] and player_id in im.get("notified", [])} - new_ids)
         mine = {c["id"] for c in chars}
         out["pending_illustrations"] = sum(1 for g_id in {c["game_id"] for c in chars} for im in ws.find("image", game_id=g_id, status="pending")
                                            if mine & set(im.get("visible_to", [])))
@@ -637,8 +645,14 @@ class Engine:
         for c in chars:
             for im in ws.find("image", game_id=c["game_id"], status="ready"):
                 if c["id"] in im["visible_to"] and player_id not in im.get("notified", []):
-                    out.append({"game_id": c["game_id"], "character_id": c["id"], "image_id": im["id"], "kind": im.get("kind", "scene"), "tick": im["tick"],
-                                "caption": im.get("caption", "")})
+                    item = {"game_id": c["game_id"], "character_id": c["id"], "image_id": im["id"], "kind": im.get("kind", "scene"), "tick": im["tick"],
+                            "caption": im.get("caption", ""), "link_text": "Illustration: " + (im.get("caption") or "").strip()}
+                    try:  # a ready link, so the client can list the picture without another call
+                        item["url"] = self.images.storage.signed_url(im["path"], config.IMAGE_URL_TTL_SECONDS)
+                        item["expires_in_seconds"] = config.IMAGE_URL_TTL_SECONDS
+                    except Exception:
+                        pass  # the client falls back to get_image
+                    out.append(item)
                     if mark:
                         im.setdefault("notified", []).append(player_id)
                         ws.touch("image", im["id"])
