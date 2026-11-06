@@ -711,3 +711,23 @@ def test_envelope_lists_takeovers_and_unclaimed_pregenerated(world):
     assert [t["npc_id"] for t in env["takeover_options"]] == ["npc_clerk"] and all("pregen_id" not in t for t in env["takeover_options"])
     claimed = store.get("character", cid)[0].get("pregen_id")
     assert claimed == "pregen_test_pc" and "unclaimed_pregenerated" not in env       # the only pregenerated character is taken
+
+
+def test_an_answer_cannot_move_the_clock_to_another_tick(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    g0, _ = store.get("game", gid)
+    t0 = g0["clock"]["tick"]
+
+    def rule(env, n):
+        r = base()
+        r["handling"] = "answered"
+        r["results"][cid] = [item("ok")]
+        r["state_changes"] = [{"op": "merge", "entity": "game", "id": gid, "patch": {"clock": {"tick": t0 + 1}}},
+                              {"op": "merge", "entity": "character", "id": cid, "patch": {"tick_state": {"tick": t0 + 1}}}]
+        return r
+    eng.gm.rule = rule
+    eng.submit_action("p_jorge", gid, "free_query", "what do I know?", cid)
+    g1, _ = store.get("game", gid)
+    c1, _ = store.get("character", cid)
+    assert g1["clock"]["tick"] == t0 and c1["tick_state"]["tick"] == t0

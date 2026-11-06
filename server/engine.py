@@ -278,8 +278,22 @@ class Engine:
         pre_met = self._met_map(ws, game_id)
         tick = (game.get("clock") or {}).get("tick", 0)  # the tick this response belongs to, before any clock change
         style = (game.get("settings") or {}).get("image_style")
+        locked = None
+        if mode != "resolve_tick":  # only closing a tick moves the clock to the next tick; an answer or an action must not
+            locked = ({k: game["clock"].get(k) for k in ("tick", "tick_opens", "tick_closes")},
+                      {c["id"]: (c.get("tick_state") or {}).get("tick") for c in ws.load_game_characters(game_id)})
         a.apply_ops(resp.get("state_changes"))
         game = ws.get("game", game_id)
+        if locked:
+            for k, v in locked[0].items():
+                if game["clock"].get(k) != v:
+                    game["clock"][k] = v
+                    ws.touch("game", game_id)
+            for c in ws.load_game_characters(game_id):
+                ts = c.get("tick_state")
+                if c["id"] in locked[1] and isinstance(ts, dict) and ts.get("tick") != locked[1][c["id"]]:
+                    ts["tick"] = locked[1][c["id"]]  # blocks and action ids stay as the GM set them
+                    ws.touch("character", c["id"])
         if (game.get("settings") or {}).get("image_style") != style:  # the game's image style is immutable
             game.setdefault("settings", {})
             if style is None:
