@@ -11,17 +11,24 @@ This repository is public: never write secrets, keys or private game data in it.
 - Supabase project for FabulA (find it with list_projects). Tables gm_* (id, data jsonb, version, index columns). gm_games.turn_closes and gm_submit_actions.turn are real columns.
 - Cloudflare Worker "ai-master-turn" runs every 5 minutes and calls /internal/resolve_turn. Its secrets SERVER_URL and CRON_SECRET are set in the Worker. CRON_SECRET was rotated on 2026-11-08 and its value lives in the Vercel env.
 - Vercel env: MCP_API_KEY (the connector key), CRON_SECRET, ADMIN_SECRET, GEMINI_API_KEY, SUPABASE_*, GITHUB_TOKEN, CLOUDFLARE_*.
+- Saves: Workspace.commit writes all records of a request through the Postgres function gm_commit (supabase/schema.sql, installed in Supabase 2026-11-08, tested in a rolled-back transaction). Without the function the server falls back to one-by-one saves. Re-run schema.sql after schema changes.
+- Every AI Master call is counted per day by level, tier, mode, request kind and game in gm_usage (record stats:<day>); the host command gm_usage shows it.
+- submit_action accepts request_id: the same id runs once and returns the first answer (kept in the player record, 5 per player, 1 hour).
+- Gemini answers are forced into the shape in server/schema.py (GEMINI_STRUCTURED_OUTPUT, default on; the server turns it off by itself if the provider refuses it).
 - Gemini: strong model for turn closing and character checks (gemini-3.8-flash), light model for everything else (gemini-3.5-flash-lite).
 
 ## Conventions
-- Tests: pip install -r requirements.txt pytest; PYTHONPATH=<deps>:. python3 -m pytest tests -q (106 pass).
+- Tests: pip install -r requirements.txt pytest; PYTHONPATH=<deps>:. python3 -m pytest tests -q (132 pass, 1 skipped). Windows needs tzdata (now in requirements.txt).
+- Before releasing a change to gm/ or a ruleset, run the live scenarios against Gemini: FABULA_LIVE_SCENARIOS=1 GEMINI_API_KEY=... pytest tests/test_scenarios.py -k live -s (recorded scenarios: tests/scenarios/scenarios.json, checks in tests/scenario_checks.py).
 - "tick" was renamed to "turn" everywhere on 2026-11-08, including data keys and DB columns. Never reintroduce "tick".
-- Requirement IDs: TLR-xx-yyy (xx chapter, yyy sequence). Unbuilt ones carry "-Pending", dropped only when deployed. 17 are pending (four-level request answering, name knowledge and short NPC descriptions).
+- Requirement IDs: TLR-xx-yyy (xx chapter, yyy sequence). Unbuilt ones carry "-Pending", dropped only when deployed. 36 are pending on 2026-11-08: the four-level request model, name knowledge and short NPC descriptions, token reduction (03-010 to 03-014, 07-006 to 07-008), security and operations (02-006 to 02-008, 08-007 to 08-012).
+- Implementation order agreed with the owner: Priority 1 (08-006, 06-009, 06-010, 03-015, 03-016) is deployed (PR 1, 2026-11-08). Next, Priority 2: token savings, starting with 03-011 (reuse of the static instructions), then 05-007, 03-010, 03-014, 03-012, 07-006, 07-007. Then the request-level model (01-009 first), gameplay integrity (06-005 to 06-008, 05-005, 05-006), security and operations, long-term scaling. 08-005 stays pending until level 2 answers are logged.
 - Commits end with the Co-Authored-By and Claude-Session lines given by the session.
 - For data changes, use SQL migrations and verify with queries. Stored JSON keys follow the code names.
 
 ## Open items
-- Remove the legacy alias /internal/resolve_tick in server/app.py (the Worker now uses resolve_turn).
+- Remove the legacy alias /internal/resolve_tick in server/app.py (the Worker now uses resolve_turn, so it is safe to remove).
+- 2026-11-08: a client could not read the adventures repository (list_adventures and list_seeds failed). The error hides the HTTP status (server/files.py _github_get). The only fine-grained token in the owner's GitHub account (created 2026-10-28, all repositories, Contents read and write) is probably the one that was edited or regenerated that day. Vercel's GITHUB_TOKEN should be a token limited to rpg_adventures with Contents read-only. Proposal pending: include the HTTP status in the error and add a host check for the adventures source.
 - Update the GitHub Actions secret CRON_SECRET (repo settings) to the new value; delete the old Worker "ai-master-tick" and its cron trigger.
 - Test game g_a3d4c094: player 3 holds Wendy Shawl; Roberta Caroll and Bobby Wiseman are free. Swap only if the user asks.
 - Test game g_6117dfc7: the user may want turn 4 to close at 03:00 Madrid time.
@@ -29,4 +36,5 @@ This repository is public: never write secrets, keys or private game data in it.
 - Idea: route pregen and character checks to the light model if the strong model keeps timing out.
 
 ## Working with the owner
+The owner uses the built-in browser in the Claude desktop app and signs in himself; never type his passwords.
 The owner writes in English here. He wants proposals and drafts first, and decisions confirmed before anything is pushed or deployed. He prefers not to keep permanent local copies of his GitHub repos: use one working clone in your own working folder, keep it current with git pull, and delete any extra clones after use.
