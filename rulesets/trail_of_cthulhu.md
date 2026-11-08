@@ -22,7 +22,7 @@ summary: Lovecraftian investigative horror in the 1930s. Investigative abilities
 >
 > **Two idioms, one rule set.** Rules tagged **[Purist]** suit bleak, philosophical, cosmic horror in which learning the truth dooms the seeker. Rules tagged **[Pulp]** suit desperate physical struggle in which Investigators survive more often. Untagged rules apply to both. The adventure picks the idiom in its header (`mode: purist` or `mode: pulp`, default Purist) and may borrow single rules from the other.
 >
-> **Asynchronous play.** Players act at different times and the AI Master resolves their actions, some at once and the rest together at each tick. The [House] rules in §2, §4.2, §4.9, §5.8, §6 and §7 adapt the live-table rules to that.
+> **Asynchronous play.** Players act at different times and the AI Master resolves their actions, some at once and the rest together at each turn. The [House] rules in §2, §4.2, §4.9, §5.8, §6 and §7 adapt the live-table rules to that.
 
 ---
 
@@ -133,8 +133,8 @@ How Drives cost and refresh Stability is in §5.3.
 
 - A character reaches the game by one of three routes: **generated** with the AI Master (§2.1), **pregenerated** (supplied by the adventure) or **provided** by the player in any format. Whatever the route, produce the canonical character record and run the checklist of §2.7.
 - **Pregenerated** characters may swap Pillars, Sources or small details but not break the budgets. A pregenerated character built for another party size is **rescaled** by trimming Investigative points only, highest ratings first, keeping each ability the character needs at 1 or more, and telling the player exactly what changed. The adventure's own trim table wins. A character claimed by one player cannot be claimed by another. With no pregenerated characters, or too few, generate three to five on demand and save them as unclaimed (`status: "pregen"`).
-- **Late joiners** use the budgets for the party size at the start and get an in-world way into the story, designed by the AI Master. They begin when the next tick opens.
-- **A dead, Gone or committed character** may be replaced in the same game by a newly generated one, an unclaimed pregenerated one or an NPC marked available. The replacement arrives in the fiction within one or two ticks and does not inherit the other's knowledge, items or relationships.
+- **Late joiners** use the budgets for the party size at the start and get an in-world way into the story, designed by the AI Master. They begin when the next turn opens.
+- **A dead, Gone or committed character** may be replaced in the same game by a newly generated one, an unclaimed pregenerated one or an NPC marked available. The replacement arrives in the fiction within one or two turns and does not inherit the other's knowledge, items or relationships.
 - **Converting an NPC into a character.** Keep the NPC's name, role, trait, knowledge and inventory. Build the sheet from the NPC's tier (§7) and the budgets of §2.1a, never above them. The NPC stops acting as an NPC. A **main** NPC of the adventure is never offered.
 - **Converting a sheet from another system** (including other GUMSHOE games and *Call of Cthulhu*): map each entry to the nearest ability here, keep the totals within the budgets, drop spells and powers, turn wealth into Credit Rating and narrative means, and give a traceability table (original entry, result, note). Show it and wait for approval. Imported pools start full.
 - **A player who leaves** turns the character into a GM-run ally who stays safe or departs plausibly.
@@ -288,7 +288,7 @@ A test is called only when the outcome is in doubt and failure matters. Otherwis
 - **Success at a cost** is allowed for a must-pass obstacle: the action succeeds and the test sets the price (the fence is climbed but the character is cut).
 - **Cooperation:** the leader tests and spends normally; an assistant may spend any number of points, **all but one** adding to the leader's roll. **Piggybacking:** a group acting together appoints a leader; every other participant pays 1 point from the relevant pool and takes part; for each participant who cannot pay, the Difficulty rises by 2.
 - **Light, weather and terrain** shift Difficulty by 1. **Surprise:** +2 on the surprised character's next test [House].
-- **Declared spends [House, asynchronous].** Players cannot answer mid-tick, so spends are those declared in the action or in the standing orders (§6.4). Apply them as declared, each +1 before the roll. Never apply more than declared or more than the pool holds.
+- **Declared spends [House, asynchronous].** Players cannot answer mid-turn, so spends are those declared in the action or in the standing orders (§6.4). Apply them as declared, each +1 before the roll. Never apply more than declared or more than the pool holds.
 - **Dice [House].** The AI Master rolls every die, using only the server's dice stream, in order. Each roll is reported without its Difficulty (it may be revealed afterwards if the player asks). A roll report shows the ability, the spend, the die, the total and the outcome: success, narrow success, failure, narrow failure.
 
 ### 4.3 Contests and chases
@@ -298,7 +298,7 @@ In a **contest** two characters actively oppose each other and **the first to fa
 - **Prolonged chase:** the pursued loses only after failing two or three more tests than the pursuer. **Relentless pursuer:** lower the Difficulty, but the characters make three tests for each of the pursuer's.
 - **Investigative contests** are rare (Bargain at an auction, Assess Honesty at a card table) and used only when the contest is as dramatic as a fight. The opponent's pool is at most 1 higher, and defeat never stalls the plot (a cooler NPC, a warned enemy, a worse route).
 - **Being questioned by an NPC.** Casual pumping: let the player notice with Assess Honesty and choose what to say. An official or hostile interrogation is a plot device, not a contest.
-- **Escape pool [House, optional]** for a trapped group: start at 0; add 1 to 3 per way-out clue, +1 per relevant Investigative spend and +1 per successful relevant test; Difficulty is 6 plus 2 per escaping character; one attempt per tick; failure empties the pool and triggers a hazard.
+- **Escape pool [House, optional]** for a trapped group: start at 0; add 1 to 3 per way-out clue, +1 per relevant Investigative spend and +1 per successful relevant test; Difficulty is 6 plus 2 per escaping character; one attempt per turn; failure empties the pool and triggers a hazard.
 
 ### 4.4 Fighting
 
@@ -339,7 +339,7 @@ Fights use Scuffling against Scuffling or Weapons, Weapons against Weapons, or F
 
 ### 4.6 Time, scenes and clocks [House]
 
-- Play is divided into **Blocks** (parts of an in-world day) and **ticks** (the interval at which the AI Master resolves all actions). Each Investigator has the Blocks the adventure's clock gives. A long action (an evening of research, a night's rest) costs a Block; a brief one (a telephone call, a few lines in the notebook) costs none.
+- Play is divided into **Blocks** (parts of an in-world day) and **turns** (the interval at which the AI Master resolves all actions). Each Investigator has the Blocks the adventure's clock gives. A long action (an evening of research, a night's rest) costs a Block; a brief one (a telephone call, a few lines in the notebook) costs none.
 - The adventure may keep a **clock** (dates, a countdown, an escalating phenomenon). Time-sensitive events fire on their dates whether or not the characters are there.
 - **Fail forward.** A failed test costs time, access, trust, safety or evidence; it never halts the investigation or erases an essential clue.
 
@@ -376,7 +376,7 @@ Absent, paused and away characters are never taken to the bottom at any level (�
 
 ### 4.10 Improving an Investigator
 
-At the end of each case each player gets **2 build points per session played** (adjust for the number of ticks in the story) to spend one for one on Investigative or General abilities, new or existing, or to reassign 1 or 2 points as atrophy. Never on Credit Rating, Cthulhu Mythos or Sanity. The AI Master may adjust Credit Rating for treasure, decoration, ruin. [Purist] nothing improves the Investigator, but reassigning points is allowed.
+At the end of each case each player gets **2 build points per session played** (adjust for the number of turns in the story) to spend one for one on Investigative or General abilities, new or existing, or to reassign 1 or 2 points as atrophy. Never on Credit Rating, Cthulhu Mythos or Sanity. The AI Master may adjust Credit Rating for treasure, decoration, ruin. [Purist] nothing improves the Investigator, but reassigning points is allowed.
 
 ---
 
@@ -491,7 +491,7 @@ Lovecraftian magic is alien science, garbled knowledge, or a focus for psychic p
 1. **One viewpoint.** Every thread is narrated through the Investigator. No cutaways.
 2. **Allies advise and assist; the character decides.** A GM-run ally never rolls for the player, overrides a choice or solves a problem the player has not engaged with.
 3. **Spotlight is automatic.** The freed attention goes to deeper NPCs and consequences, not to filler.
-4. **Own pace.** With early close on, the tick resolves when the player has used the Blocks intended.
+4. **Own pace.** With early close on, the turn resolves when the player has used the Blocks intended.
 5. **The clock is real.** An Investigator cannot do everything.
 6. **Fail forward, not fail free.** §4.6.
 7. **Be honest and fair.** The AI Master never fudges a roll; Difficulty is set before the roll; warnings precede lethal danger.
@@ -499,8 +499,8 @@ Lovecraftian magic is alien science, garbled knowledge, or a focus for psychic p
 9. **Pacing.** Aim for about 12 to 16 meaningful scenes across the adventure: investigation first, then the build, then the finale and a short epilogue.
 
 ### 6.2 Party [House]
-1. **Parallel threads.** Every character acts every tick. Group characters by place into threads and resolve each. Give every player a result of similar weight and a hook for the next tick.
-2. **Splitting the party** is allowed. Every thread resolves every tick.
+1. **Parallel threads.** Every character acts every turn. Group characters by place into threads and resolve each. Give every player a result of similar weight and a hook for the next turn.
+2. **Splitting the party** is allowed. Every thread resolves every turn.
 3. **Group tests.** A test that affects everyone (stealth, scares) is rolled by each affected character separately, with separate dice. A helper's contribution follows §4.2.
 4. **Disagreement.** Players may argue in character; the AI Master does not resolve it for them.
 5. **Shared knowledge.** Knowledge moves between characters only in the fiction, by speaking, a message or a document, and arrives as hearsay tagged with its source.
@@ -527,9 +527,9 @@ One world, one truth. Order first, dice second. Nobody's action is dropped.
 ### 6.4 Standing orders, absent and paused players [House]
 
 - **Standing orders** are stored in each character's record (`settings.standing_orders`): `hold` (where to stay and what to do when absent), `risk_tolerance` (`low`, `medium`, `high`), `default_spends` (for example Sense Trouble 1 each Block), `never_do` (a list) and `reply_to_messages`. The default: stay safe, rest, take no risks.
-- **A missed tick.** Apply the standing orders; with none, the character **holds**: stays put or goes to lodgings, rests, keeps routine, declines risky invitations and takes no irreversible or dangerous action. A task marked `continue until told` (a long archive search) continues.
+- **A missed turn.** Apply the standing orders; with none, the character **holds**: stays put or goes to lodgings, rests, keeps routine, declines risky invitations and takes no irreversible or dangerous action. A task marked `continue until told` (a long archive search) continues.
 - **Absent characters** are never killed, committed or driven to Sanity 0 by inaction, take no lethal risk and are not chosen as the target of a finale outcome unless their player walked past a decision gate. They may suffer ordinary world consequences: time passing, a missed meeting.
-- **Consecutive misses.** After 3 missed ticks the player is `away`: the character withdraws to a safe place. After 6, ask the host whether to drop the player; a `dropped` player's character becomes a GM-run ally or leaves the story.
+- **Consecutive misses.** After 3 missed turns the player is `away`: the character withdraws to a safe place. After 6, ask the host whether to drop the player; a `dropped` player's character becomes a GM-run ally or leaves the story.
 - **Paused players.** When a player sends `pause`, the character holds out of danger and the next result is an out-of-character check-in only.
 
 ---
@@ -548,7 +548,7 @@ NPCs have no full sheets. Record only what play needs.
 | Dangerous | soldier, killer, expert fighter, cult enforcer | 8 | Athletics 8 to 9, Scuffling 8, Firearms 5, Weapons 7 | 4 |
 | Creature | see below | by creature | Athletics, Scuffling, Weapons | 3 to 5 |
 
-- **NPC tests.** An NPC acting against a character rolls a d6 from the stream plus the relevant rating against the character's Difficulty, or in a contest. Ordinary NPCs do not spend points; a named antagonist may spend up to 2 points per tick, noted in the GM-only notes. NPC pools may be recorded as ratings; the AI Master tracks the points they spend.
+- **NPC tests.** An NPC acting against a character rolls a d6 from the stream plus the relevant rating against the character's Difficulty, or in a contest. Ordinary NPCs do not spend points; a named antagonist may spend up to 2 points per turn, noted in the GM-only notes. NPC pools may be recorded as ratings; the AI Master tracks the points they spend.
 - **Social outcomes** between characters and NPCs use the characters' Investigative abilities, not NPC rolls. Crowds are handled in narration.
 - **Creature statistics** (an adventure supplies them): Athletics, Health, Scuffling or Weapons, Hit Threshold, weapon modifier, armor, Alertness and Stealth Modifiers, **Stability Loss** (the additional loss over the standard one for sighting it, fighting it or watching its attacks) and special powers. A creature dies, vanishes or is banished when Health falls **below 0**. **Refresh:** a creature not encountered for 24 hours refreshes all pools except Health, which recovers d6 per day; one met again the same day refreshes only to half its ratings and no Health. A creature with two ratings by mode (land and air) loses or gains the extra points once only when it changes mode.
 - **Keeping monsters fresh [craft].** Vary a creature's powers, spoor and behavior; stress the features that horrify most and contradict lesser details. The Mythos is protean.
@@ -594,10 +594,10 @@ The state contract fixes the outer shape of a character. This ruleset fills thre
 - `pillars`: `[{ "name": "...", "intact": bool }]`.
 - `sources_of_stability` (module on): `[{ "name", "phrase", "unlocked": bool, "last_used_day": n|null }]`.
 - `haven`: `{ "last_used_day": n|null, "breached": bool }`.
-- `mental_illness`: `[{ "kind", "detail", "since_tick": n }]`.
+- `mental_illness`: `[{ "kind", "detail", "since_turn": n }]`.
 - `mythos_tomes`: `[{ "title", "read": "skimmed|pored", "mythos_gain": n }]`; `spells`: `[{ "name", "difficulty": n, "cost": "...", "source": "..." }]`.
 - `dedicated_pools`: `[{ "for": "...", "ability": "...", "max": n, "cur": n }]`.
-- `risk_factor_paid`: a list of ticks when a Drive cost was paid.
+- `risk_factor_paid`: a list of turns when a Drive cost was paid.
 
 **`gm_only`** (never shown): `flags`, the true Sanity and Stability losses pending, hidden Drive details.
 

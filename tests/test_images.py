@@ -57,7 +57,7 @@ def gm_rule(env, n):
             return {"status": "ok", "prompt": "A narrow lamp-lit street in the rain, brick houses, wet cobbles, wide shot, 1925", "caption": "The street at night"}
         return {"status": "ok", "appearance": "A stooped man in his sixties, grey whiskers, a worn black coat and a watch chain", "signature_action": "polishing his spectacles"}
     r = standard_gm(env, n)
-    if env["mode"] == "resolve_tick":
+    if env["mode"] == "resolve_turn":
         ids = [c["id"] for c in env["characters"]]
         r["portraits"] = [dict(i, visible_to=[x if x != "FIRST" else ids[0] for x in i["visible_to"]]) for i in PROPOSALS["portraits"]]
         if PROPOSALS["hack_style"]:
@@ -113,12 +113,12 @@ def test_proposals_are_queued_only_when_on_and_bad_ones_dropped(world):
     gid, cid = start(eng, "p_a")
     PROPOSALS["items"] += [{"prompt": "x", "caption": "too short", "visible_to": ["FIRST"]},
                            {"prompt": "A long enough prompt but nobody can see it", "caption": "c", "visible_to": ["c_unknown"]},
-                           {"prompt": "A third valid one beyond the per-tick limit", "caption": "c", "visible_to": ["FIRST"]}]
-    eng.resolve_tick(gid)
+                           {"prompt": "A third valid one beyond the per-turn limit", "caption": "c", "visible_to": ["FIRST"]}]
+    eng.resolve_turn(gid)
     imgs = scenes(store, gid)
     assert len(imgs) == 2 and all(i["status"] == "pending" and i["visible_to"] == [cid] for i in imgs) and prov.calls == []   # four proposals, two usable
     gid2, _ = start(eng, "p_b", illustrations="off")
-    eng.resolve_tick(gid2)
+    eng.resolve_turn(gid2)
     assert store.find("image", game_id=gid2) == []                              # off: the AI Master's proposals are ignored
 
 
@@ -130,12 +130,12 @@ def test_illustration_brief_lists_places_without_a_picture(world):
     chars = ws.load_game_characters(gid)
     brief = eng._illustration_brief(ws, game, chars)
     here = chars[0]["location"]["id"]
-    assert brief["tick_picture"] is True and brief["max_pictures"] == 4
+    assert brief["turn_picture"] is True and brief["max_pictures"] == 4
     assert [x["location_id"] for x in brief["locations_without_picture"]] == [here]
     assert brief["locations_without_picture"][0]["characters_there"] == [cid]
     # a picture that names the place counts as drawn; one that does not leaves it listed
     PROPOSALS["items"] = [{"prompt": "The lodging house hall at night, lamplight, 1925", "caption": "c", "visible_to": ["FIRST"], "location_id": here}]
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     assert scenes(store, gid)[0]["location_id"] == here
     ws = eng._ws()
     assert eng._illustration_brief(ws, ws.get("game", gid), ws.load_game_characters(gid))["locations_without_picture"] == []
@@ -147,7 +147,7 @@ def test_illustration_brief_lists_places_without_a_picture(world):
 def test_draw_deliver_list_and_ask_again(world):
     eng, store, prov, storage, clock = world
     gid, cid = start(eng, "p_a")
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     iid = scenes(store, gid)[0]["id"]
     assert eng.get_image("p_a", gid, iid)["status"] == "pending"
     out = eng.process_images(limit=1)
@@ -184,7 +184,7 @@ def test_only_the_characters_who_saw_it_can_get_it(world):
     gid, cid = start(eng, "p_a")
     eng.join_game("p_b", gid)
     eng.generate_character("p_b", gid, "pregen", pregen_id=PG.get("p_b", "pregen_test_pc"))
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     eng.process_images(limit=20)
     iid = scenes(store, gid)[0]["id"]
     with pytest.raises(EngineError):
@@ -200,7 +200,7 @@ def test_only_the_characters_who_saw_it_can_get_it(world):
 def test_failures_quota_budget_and_expiry(world):
     eng, store, prov, storage, clock = world
     gid, cid = start(eng, "p_a")
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     iid = scenes(store, gid)[0]["id"]
     eng.process_images(limit=4)                                                 # the character's portrait first
     prov.fail = True
@@ -211,10 +211,10 @@ def test_failures_quota_budget_and_expiry(world):
     prov.fail = False
     PROPOSALS["items"][0]["caption"] = "second"
     eng.submit_action("p_a", gid, "action", "wait", cid)
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     pend = scenes(store, gid, status="pending")
     n = len(prov.calls)
-    assert pend                                     # a solo action closes the tick at once, so there can be more than one
+    assert pend                                     # a solo action closes the turn at once, so there can be more than one
     assert eng.process_images(budget_seconds=1) == {"generated": 0, "failed": 0, "dropped": 0} and len(prov.calls) == n
     # the daily guard stops generation but leaves the picture queued
     store.t["usage"].clear()
@@ -247,7 +247,7 @@ def test_only_the_host_of_the_game_sets_options(world):
 def test_deleting_a_game_deletes_its_pictures(world):
     eng, store, prov, storage, clock = world
     gid, cid = start(eng, "p_a")
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     eng.process_images()
     assert storage.files and store.find("image", game_id=gid)
     out = admin.run(eng, "delete_game", {"game_id": gid})
@@ -275,7 +275,7 @@ def test_the_game_style_is_required_set_once_and_immutable(world):
     gid, cid = start(eng, "p_a")
     style = store.get("game", gid)[0]["settings"]["image_style"]
     PROPOSALS["hack_style"] = True
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     assert store.get("game", gid)[0]["settings"]["image_style"] == style        # the AI Master cannot change it
     # turning pictures on later freezes the server default as the game's style
     gid2, _ = start(eng, "p_b", illustrations="off")
@@ -329,7 +329,7 @@ def test_npc_portrait_only_for_those_who_met_them_and_scenes_use_references(worl
                                "signature_action": "unlocking a heavy door", "visible_to": ["FIRST"]},
                               {"subject_id": "npc_bad", "name": "No look", "appearance": "short", "visible_to": ["FIRST"]}]
     PROPOSALS["items"] = [dict(PROPOSALS["items"][0], subjects=["npc_warden", cid])]
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     npc = [p for p in portraits(store, gid) if p["subject_id"] == "npc_warden"]
     assert len(npc) == 1 and npc[0]["visible_to"] == [cid] and npc[0]["name"] == "Warden Pike"
     assert not [p for p in portraits(store, gid) if p["subject_id"] == "npc_bad"]
@@ -345,7 +345,7 @@ def test_npc_portrait_only_for_those_who_met_them_and_scenes_use_references(worl
     PROPOSALS["portraits"] = [{"subject_id": "npc_warden", "visible_to": ["FIRST"]}]
     PROPOSALS["items"] = []
     eng.submit_action("p_a", gid, "action", "wait", cid)
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     assert store.get("image", npc[0]["id"])[0]["visible_to"] == [cid] and len(prov.calls) == n
 
 
@@ -403,7 +403,7 @@ def test_get_image_inline_returns_the_picture_itself(world):
     from server.app import build_mcp
     eng, store, prov, storage, clock = world
     gid, cid = start(eng, "p_a")
-    eng.resolve_tick(gid)
+    eng.resolve_turn(gid)
     iid = scenes(store, gid)[0]["id"]
     eng.authenticate = lambda key: "p_a"
     mcp = build_mcp(eng)
@@ -436,7 +436,7 @@ def test_character_portrait_is_queued_when_the_game_starts(world):
 
 def test_illustrations_default_to_on_when_the_server_can_draw():
     from server import tasks
-    base = {"lethality": "high", "tick_span": "day", "tick_interval_hours": 24, "pvp": "soft", "visibility": "private"}
+    base = {"lethality": "high", "turn_span": "day", "turn_interval_hours": 24, "pvp": "soft", "visibility": "private"}
     assert tasks.validate_game(base, {}, True) == ["image_style is required when illustrations are on"]
     assert tasks.validate_game(dict(base, image_style="x" * config.STYLE_MIN), {}, True) == []
     assert tasks.validate_game(base, {}, False) == []  # no provider: off

@@ -16,7 +16,7 @@ Use this when the player wants to start a new game from an adventure. A game is 
 `create_game(player_key, adventure_id, title, language, display_name, ...)`. Optional arguments prefill defaults. It returns a **work package** that collects the settings with the player. Follow its steps. In short, you will settle with the player:
 
 - **Lethality:** low, moderate or high (the default is high; the package explains what each means).
-- **Tick:** how often the world advances (default 24 hours) and its span (a day of four Blocks, or one Block).
+- **Turn:** how often the world advances (default 24 hours) and its span (a day of four Blocks, or one Block).
 - **PvP:** none, soft or full.
 - **Visibility:** `private` (only people who get the game id) or `open` (listed for other registered players while there are free seats).
 - **Language** and the player's display name.

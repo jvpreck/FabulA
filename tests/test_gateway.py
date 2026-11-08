@@ -8,7 +8,7 @@ class FakeEngine:
     def resolve_due(self):
         return {"checked": 0, "results": []}
 
-    def resolve_tick(self, gid):
+    def resolve_turn(self, gid):
         return {"game_id": gid, "resolved": True}
 
 
@@ -44,11 +44,11 @@ def test_gateway_auth(monkeypatch):
     assert run(gw, "/mcp", {"authorization": "Bearer k1"})[0]["status"] == 200
     assert run(gw, "/mcp", query=b"key=k1")[0]["status"] == 200
     # the player key must not open the internal endpoint, and the cron secret must not open the MCP endpoint
-    assert run(gw, "/internal/resolve_tick", {"authorization": "Bearer k1"})[0]["status"] == 403
+    assert run(gw, "/internal/resolve_turn", {"authorization": "Bearer k1"})[0]["status"] == 403
     assert run(gw, "/mcp", {"authorization": "Bearer c1"})[0]["status"] == 403
-    r = run(gw, "/internal/resolve_tick", {"authorization": "Bearer c1"})
+    r = run(gw, "/internal/resolve_turn", {"authorization": "Bearer c1"})
     assert r[0]["status"] == 200 and json.loads(r[1]["body"]) == {"checked": 0, "results": []}
-    r = run(gw, "/internal/resolve_tick", {"authorization": "Bearer c1"}, b"game_id=g_1")
+    r = run(gw, "/internal/resolve_turn", {"authorization": "Bearer c1"}, b"game_id=g_1")
     assert json.loads(r[1]["body"])["game_id"] == "g_1"
 
 
@@ -57,7 +57,7 @@ def test_gateway_fails_closed(monkeypatch):
     monkeypatch.delenv("CRON_SECRET", raising=False)
     gw = Gateway(Inner(), FakeEngine())
     assert run(gw, "/mcp", {"authorization": "Bearer "})[0]["status"] == 403
-    assert run(gw, "/internal/resolve_tick", {"authorization": "Bearer "})[0]["status"] == 403
+    assert run(gw, "/internal/resolve_turn", {"authorization": "Bearer "})[0]["status"] == 403
 
 
 class AdminEngine(FakeEngine):
@@ -91,8 +91,8 @@ def test_admin_endpoint_needs_its_own_secret(monkeypatch):
     r = asyncio.run(post({"authorization": "Bearer a1"}))
     assert r[0]["status"] == 200 and json.loads(r[1]["body"]) == {"ok": "list_games"} and seen == [("list_games", {})]
     assert asyncio.run(post({"authorization": "Bearer a1"}, b"not json"))[0]["status"] == 400
-    # the admin secret does not open the player endpoint or the tick endpoint
+    # the admin secret does not open the player endpoint or the turn endpoint
     assert run(gw, "/mcp", {"authorization": "Bearer a1"})[0]["status"] == 403
-    assert run(gw, "/internal/resolve_tick", {"authorization": "Bearer a1"})[0]["status"] == 403
+    assert run(gw, "/internal/resolve_turn", {"authorization": "Bearer a1"})[0]["status"] == 403
     monkeypatch.delenv("ADMIN_SECRET")
     assert asyncio.run(post({"authorization": "Bearer "}))[0]["status"] == 403   # fails closed

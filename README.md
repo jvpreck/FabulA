@@ -4,11 +4,13 @@
 
 - **Federated:** each player brings their own AI client (Claude, ChatGPT, Grok and others) through an MCP connector, and the engine federates them into one shared game.
 - **Asynchronous:** players act whenever they like; nobody has to be online at the same time.
-- **Batch-processed:** the world advances in ticks, and the AI Master resolves everyone's actions together when a tick closes.
+- **Batch-processed:** the world advances in turns, and the AI Master resolves everyone's actions together when a turn closes.
 - **User-driven:** the players' choices drive the story; the AI Master keeps the secrets and the rules.
 - **Lore AI:** the AI Master (Google Gemini) holds the adventure's lore and runs the world.
 
 **New player? See [gm/setup_guide.md](gm/setup_guide.md)** for a step-by-step guide to connecting a Claude client and starting a first game.
+
+**What must the engine do?** See [TOP_LEVEL_REQUIREMENTS.md](TOP_LEVEL_REQUIREMENTS.md).
 
 FabulA was previously named `multi-player-mcp-engine` (this repository was renamed; the old address redirects here).
 
@@ -32,10 +34,10 @@ An asynchronous, multi-player (or solo) tabletop RPG run by an AI Master.
 ## Play model
 
 - **Player and character.** A player is a human (a random internal id, a name, a language) who proves who they are with a **secret player key** (below). A character belongs to one game and holds everything about itself in one record: sheet (maximum and current), inventory, relationships, knowledge, plans, standing orders, safety settings, decisions, events and inbox. A player can have several characters in different games.
-- **Adventure and game.** An adventure is fixed content (a markdown file in the **private** repository `jvpreck/rpg_adventures`, or a generated or imported one in the database). A game is one run of it and holds everything that changes: clock, world facts, events, decisions, scheduled events, messages and ticks.
+- **Adventure and game.** An adventure is fixed content (a markdown file in the **private** repository `jvpreck/rpg_adventures`, or a generated or imported one in the database). A game is one run of it and holds everything that changes: clock, world facts, events, decisions, scheduled events, messages and turns.
 - **NPCs and locations** are a fixed definition (in the adventure, or a database record scoped to a game) plus a per-game state record.
-- **Ticks.** Every tick (default 24 hours) the AI Master resolves all queued actions, arbitrates conflicts and returns each player their own results. Solo games can close the tick as soon as the player has acted (`early_close`).
-- **Playing without waiting.** The client answers narration, rules and stat questions locally. Minor actions that affect only one character are resolved at once (they use up that character's Blocks of the tick). Characters in the same place can talk instantly (`say`, handled by the server without calling the AI). Others in the scene see what a character does.
+- **Turns.** Every turn (default 24 hours) the AI Master resolves all queued actions, arbitrates conflicts and returns each player their own results. Solo games can close the turn as soon as the player has acted (`early_close`).
+- **Playing without waiting.** The client answers narration, rules and stat questions locally. Minor actions that affect only one character are resolved at once (they use up that character's Blocks of the turn). Characters in the same place can talk instantly (`say`, handled by the server without calling the AI). Others in the scene see what a character does.
 - **Lethality** (`low`, `moderate`, `high`; default `high`) is set per game. When a character dies the player is offered a new character, a pregenerated one, or an available NPC, and carries on in the same game.
 
 ## Repository layout
@@ -62,14 +64,14 @@ To add a ruleset, drop a markdown file with front matter into `rulesets/`. To ad
 | `start_here` | The first call in any new chat, no key needed: what the engine is, what to call for what, the list of guides |
 | `import_ruleset` | Convert a game system from a document the player provides into a ruleset (a work package). It waits for the host's approval |
 | `get_guide` | Guides, no key needed: `player-client-guide`, `players-guide`, `create-character`, `create-game`, `generate-adventure`, `narrator`, `mcp-guide` |
-| `get_setup_guide` | The guide for a new player (how to start, choose a game, make a character, commands, ticks and collaboration, autonomous actions, death, other mechanics). Needs no key |
+| `get_setup_guide` | The guide for a new player (how to start, choose a game, make a character, commands, turns and collaboration, autonomous actions, death, other mechanics). Needs no key |
 | `register_player` | Creates a player and returns their **secret player key**, once |
 | `list_games` | The player's games and the open games with free seats |
 | `list_adventures` | Adventures (files and the player's generated ones) and rulesets |
 | `list_takeovers` | The NPCs a late joiner (or a player whose character died) can take over: not main characters, already part of the players' world, or unclaimed pregenerated characters. `generate_character(route="from_npc", npc_id=...)` takes one. |
 | `list_seeds` | Published adventure seeds (a spoiler-free summary each). `generate_adventure(seed_id=...)` writes a full adventure from one. The seeds live in the `seeds/` folder of the private adventures repository |
 | `generate_adventure` | Returns a **work package** to write a new adventure locally (from a seed or a document) |
-| `create_game` | Returns a work package to choose the game settings (lethality, tick, party size) locally |
+| `create_game` | Returns a work package to choose the game settings (lethality, turn, party size) locally |
 | `join_game` | Join a game by id |
 | `generate_character` | `generate` and `provided` return a work package to build or check the sheet locally; `pregen` and `from_npc` are handled on the server |
 | `submit_package` | Sends back the finished package (`task_id` and the result). The server validates and stores it, or returns the problems to fix |
@@ -87,14 +89,14 @@ The free tier gives a strong model few requests (about 20 a day, 5 a minute) and
 
 | Tier | Model (default) | Used for |
 |---|---|---|
-| `tick` (strong) | `gemini-3.8-flash` | Closing a tick with every player's actions (arbitration, results for all), and cross-checking a character sheet |
-| `light` | `gemini-3.5-flash-lite` | Everything a single player does between ticks: autonomous actions, queries, setup, joining |
+| `turn` (strong) | `gemini-3.8-flash` | Closing a turn with every player's actions (arbitration, results for all), and cross-checking a character sheet |
+| `light` | `gemini-3.5-flash-lite` | Everything a single player does between turns: autonomous actions, queries, setup, joining |
 
 - **Counting.** Each request is counted per tier in the `gm_usage` table, per day (the provider's day, Pacific time) and per minute, so every server instance shares the count. The guards sit a little under the real limits.
-- **Strong model over its per-minute limit:** the tick is **deferred**, not degraded. It stays open and the next scheduler run (every 5 minutes) retries it.
-- **Strong model's daily quota used up, or it fails with a quota or server error:** the tick is resolved by the light model, and the tick record shows `gm_model` and `gm_degraded` so you can see it. Other errors (a real bug) are not hidden by the fallback.
+- **Strong model over its per-minute limit:** the turn is **deferred**, not degraded. It stays open and the next scheduler run (every 5 minutes) retries it.
+- **Strong model's daily quota used up, or it fails with a quota or server error:** the turn is resolved by the light model, and the turn record shows `gm_model` and `gm_degraded` so you can see it. Other errors (a real bug) are not hidden by the fallback.
 - **Light model over its limits:** the player's request waits a few seconds, then gets a plain "the AI Master is busy, try again" message.
-- **Sizing.** Three or four games with 24-hour ticks use about 4 strong requests a day plus the character checks, far under the 18 a day guard. Retries after an invalid AI answer each count as a request. The host command `gm_usage` shows today's counts.
+- **Sizing.** Three or four games with 24-hour turns use about 4 strong requests a day plus the character checks, far under the 18 a day guard. Retries after an invalid AI answer each count as a request. The host command `gm_usage` shows today's counts.
 
 ## Illustrations
 
@@ -102,11 +104,11 @@ Pictures are drawn during the player's own call (a character confirmation, an ac
 
 Each game has a setting `illustrations` (`on` by default when the server can draw pictures, `off` otherwise; chosen when the game is created, or later by the game's host with `set_game_options`). It is only offered when the server has the image provider configured.
 
-- **Who asks for a picture.** Only the AI Master, in a tick response, as `illustrations: [{prompt, caption, visible_to}]` (state contract §6.7, protocol §5.6). A bad proposal is dropped silently, so a picture can never block a tick.
-- **Generation.** The proposal is queued as a `gm_images` record. After the scheduler has resolved ticks, `/internal/resolve_tick` draws the queued pictures with **Cloudflare Workers AI, FLUX.1 schnell** (`prompt` and `steps`, base64 JPEG back). It draws at most `IMAGES_PER_RUN` (3) per run and stops when the function's time is nearly used or the day's guard (`IMAGE_RPD`, 150, under Cloudflare's roughly 170 a day at 1024x1024 and 4 steps) is reached. The rest stay queued for the next run, and are dropped after 3 days. A failure is tried once more, then marked failed.
+- **Who asks for a picture.** Only the AI Master, in a turn response, as `illustrations: [{prompt, caption, visible_to}]` (state contract §6.7, protocol §5.6). A bad proposal is dropped silently, so a picture can never block a turn.
+- **Generation.** The proposal is queued as a `gm_images` record. After the scheduler has resolved turns, `/internal/resolve_turn` draws the queued pictures with **Cloudflare Workers AI, FLUX.1 schnell** (`prompt` and `steps`, base64 JPEG back). It draws at most `IMAGES_PER_RUN` (3) per run and stops when the function's time is nearly used or the day's guard (`IMAGE_RPD`, 150, under Cloudflare's roughly 170 a day at 1024x1024 and 4 steps) is reached. The rest stay queued for the next run, and are dropped after 3 days. A failure is tried once more, then marked failed.
 - **Storage.** Image files live in a **private Supabase Storage bucket** (`gm-images`, created by `supabase/schema.sql`), at `<game_id>/<image_id>.jpg`. The database holds only the record: prompt, caption, who may see it, status and path. Nobody can open the bucket directly.
 - **Short-lived links.** When a player asks (`get_image`), the server checks that one of that player's characters is in `visible_to`, then asks Supabase to sign a link for the file (`create_signed_url`, 15 minutes by default, `IMAGE_URL_TTL_SECONDS`). The link carries a token and stops working at expiry. Links are never stored, so a player can ask again for any old picture and gets a new one each time. `list_images` lists the pictures a player's characters could see.
-- **Consistent look.** Each game has an immutable `image_style` (theme, era, place, ambience, palette) written by the client when the game is created and prefixed to every picture. Every character (when confirmed) and every NPC (the first time the AI Master reports them, with `portraits`) gets a hidden reference sheet of three 512 pictures (face, full body, in action) and then a 1024 portrait with the name written by Pillow, shown only to the characters who have met them. The AI Master is asked for one picture per tick and one for every place the characters reach that has never been drawn (the envelope lists them in `illustration_brief`; up to four per tick, `IMAGES_PER_TICK`). Scene pictures are 1024 and receive up to four of those references (`subjects`) so faces and clothes stay the same. Model: FLUX.2 klein 4B on Workers AI (multipart, up to four 512 reference images). A portrait costs about 200 Neurons, a scene about 120, of the 10,000 free per day. Progress is kept between scheduler runs.
+- **Consistent look.** Each game has an immutable `image_style` (theme, era, place, ambience, palette) written by the client when the game is created and prefixed to every picture. Every character (when confirmed) and every NPC (the first time the AI Master reports them, with `portraits`) gets a hidden reference sheet of three 512 pictures (face, full body, in action) and then a 1024 portrait with the name written by Pillow, shown only to the characters who have met them. The AI Master is asked for one picture per turn and one for every place the characters reach that has never been drawn (the envelope lists them in `illustration_brief`; up to four per turn, `IMAGES_PER_TURN`). Scene pictures are 1024 and receive up to four of those references (`subjects`) so faces and clothes stay the same. Model: FLUX.2 klein 4B on Workers AI (multipart, up to four 512 reference images). A portrait costs about 200 Neurons, a scene about 120, of the 10,000 free per day. Progress is kept between scheduler runs.
 - **Who is told.** `get_results` includes `illustrations` for pictures that are ready and that the player has not been told about yet.
 - **Cleanup.** The admin command `delete_game` also deletes the game's picture files. Supabase's free tier gives 1 GB of storage, which holds several thousand pictures of this size.
 - **Admin.** `generate_images` draws queued pictures now. `gm_usage` shows the picture count for the day.
@@ -125,22 +127,22 @@ Each game has a setting `illustrations` (`on` by default when the server can dra
 - **The host is also a player.** Register in a dedicated chat like anyone else, with a normal key and normal rights. Never put `ADMIN_SECRET` in a chat with Claude.
 - **Lost key.** The host runs `reset_player_key` for that player and gives them the new key privately. The player's characters and games are unchanged.
 
-`resolve_tick` is **not** a player tool. It is an HTTP endpoint for the server side: `GET|POST /internal/resolve_tick` (optional `?game_id=`), protected by `Authorization: Bearer $CRON_SECRET`. Without `game_id` it resolves every game whose tick is due. It is called by the `tick` GitHub Actions workflow (or any cron).
+`resolve_turn` is **not** a player tool. It is an HTTP endpoint for the server side: `GET|POST /internal/resolve_turn` (optional `?game_id=`), protected by `Authorization: Bearer $CRON_SECRET`. Without `game_id` it resolves every game whose turn is due. It is called by the `turn` GitHub Actions workflow (or any cron).
 
 ## Setup
 
 1. Run `supabase/schema.sql` in the Supabase SQL editor (it is safe to run again: it adds the `gm_tasks`, `gm_keys`, `gm_usage` and `gm_images` tables and the private `gm-images` storage bucket).
 2. Environment variables on Vercel:
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-   - `GEMINI_API_KEY`. Optional: `GEMINI_MODEL_TICK` (default `gemini-3.8-flash`), `GEMINI_MODEL_LIGHT` (default `gemini-3.5-flash-lite`; the old `GEMINI_MODEL` still works as its name), `GEMINI_THINKING_LEVEL` (default `medium`) and `GEMINI_THINKING_LEVEL_TICK`
-   - Optional quota guards, with headroom under the free tier: `GEMINI_TICK_RPD` (18) and `GEMINI_TICK_RPM` (4), `GEMINI_LIGHT_RPD` (450) and `GEMINI_LIGHT_RPM` (9)
+   - `GEMINI_API_KEY`. Optional: `GEMINI_MODEL_TURN` (default `gemini-3.8-flash`), `GEMINI_MODEL_LIGHT` (default `gemini-3.5-flash-lite`; the old `GEMINI_MODEL` still works as its name), `GEMINI_THINKING_LEVEL` (default `medium`) and `GEMINI_THINKING_LEVEL_TURN`
+   - Optional quota guards, with headroom under the free tier: `GEMINI_TURN_RPD` (18) and `GEMINI_TURN_RPM` (4), `GEMINI_LIGHT_RPD` (450) and `GEMINI_LIGHT_RPM` (9)
    - `MCP_API_KEY`: the shared key for players (`Authorization: Bearer`, `x-api-key`, or `?key=` in the connector URL)
-   - `CRON_SECRET`: for `/internal/resolve_tick`
+   - `CRON_SECRET`: for `/internal/resolve_turn`
    - `ADMIN_SECRET`: for `/internal/admin` (host commands). Use a different random value
    - Illustrations (optional): `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (an API token that may use Workers AI). Without them the option is simply not offered. Optional: `IMAGE_MODEL` (default `@cf/black-forest-labs/flux-2-klein-4b`), `IMAGE_SIZE` (1024), `IMAGE_REF_SIZE` (512), `IMAGE_STYLE` (only the fallback for a game without its own style), `IMAGE_RPD` (80), `IMAGE_RPM`, `IMAGE_URL_TTL_SECONDS`, `IMAGES_PER_RUN`
    - `GITHUB_TOKEN`: a **fine-grained personal access token** with *Contents: read-only* on the single repository `jvpreck/rpg_adventures`. The server uses it to read the adventures. Optional: `ADVENTURES_REPO` (default `jvpreck/rpg_adventures`), `ADVENTURES_REF` (default `main`), `ADVENTURES_CACHE_SECONDS` (default 300)
 3. Players add `https://<your-app>.vercel.app/mcp?key=<MCP_API_KEY>` as a custom connector.
-4. **Scheduler.** The Cloudflare Worker in `cloudflare/tick-worker/` calls `/internal/resolve_tick` every 5 minutes (setup steps in its README; it needs the `SERVER_URL` and `CRON_SECRET` secrets). The workflow `.github/workflows/tick.yml` does the same call by hand (Run workflow).
+4. **Scheduler.** The Cloudflare Worker in `cloudflare/turn-worker/` calls `/internal/resolve_turn` every 5 minutes (setup steps in its README; it needs the `SERVER_URL` and `CRON_SECRET` secrets). The workflow `.github/workflows/turn.yml` does the same call by hand (Run workflow).
 
 ## Tests
 
@@ -154,9 +156,9 @@ pytest tests
 - **Authentication is a shared connector key plus a secret key per player.** The player key is a bearer secret: whoever holds it is that player. It travels inside the MCP calls the player's Claude makes, so it is as safe as the player's chat. OAuth would be stronger.
 - **Adventure secrets are private only while the token is.** The adventures repository must stay private, and the `GITHUB_TOKEN` must be read-only and limited to it. A player who generates an adventure with their own Claude sees its secrets, by design.
 - **Cross-record writes are not one database transaction.** The server validates everything in memory and saves with optimistic version checks, so a rejected AI response changes nothing, but a crash in the middle of saving could leave records out of step.
-- **Vercel limits.** `vercel.json` sets `maxDuration` to 300 seconds (the Hobby maximum with Fluid compute). Each model call times out after 100 s (`GEMINI_TIMEOUT_SECONDS`), no new tick starts when less than 110 s of the 240 s budget remain (the game stays due and the next run takes it), and pictures use what is left.
-- **Gemini retries.** A transient Gemini error (503 "high demand", 500, 502, 504) is retried quietly with exponential backoff and jitter (waits of about 2, 6 and 18 seconds) before the request fails or, for a tick, falls back to the light model. Quota errors (429), timeouts and bad requests are never retried. Tunable with `GEMINI_RETRIES` (default 3), `GEMINI_RETRY_BASE_SECONDS` (default 2) and `GEMINI_RETRY_BUDGET_SECONDS` (default 40, the most time one request may spend waiting).
-- **The AI Master is an LLM.** The server enforces structure, ownership of fields, dice, and the lethality guard, but the AI's judgement on secrecy and fairness is not machine-checked. A lite model on a long, rule-dense JSON task is unbenchmarked here, so the models can be changed with `GEMINI_MODEL_TICK` and `GEMINI_MODEL_LIGHT`. The model names `gemini-3.8-flash` and the `medium` thinking level on it were taken from your description and have not been tested against the live API.
+- **Vercel limits.** `vercel.json` sets `maxDuration` to 300 seconds (the Hobby maximum with Fluid compute). Each model call times out after 100 s (`GEMINI_TIMEOUT_SECONDS`), no new turn starts when less than 110 s of the 240 s budget remain (the game stays due and the next run takes it), and pictures use what is left.
+- **Gemini retries.** A transient Gemini error (503 "high demand", 500, 502, 504) is retried quietly with exponential backoff and jitter (waits of about 2, 6 and 18 seconds) before the request fails or, for a turn, falls back to the light model. Quota errors (429), timeouts and bad requests are never retried. Tunable with `GEMINI_RETRIES` (default 3), `GEMINI_RETRY_BASE_SECONDS` (default 2) and `GEMINI_RETRY_BUDGET_SECONDS` (default 40, the most time one request may spend waiting).
+- **The AI Master is an LLM.** The server enforces structure, ownership of fields, dice, and the lethality guard, but the AI's judgement on secrecy and fairness is not machine-checked. A lite model on a long, rule-dense JSON task is unbenchmarked here, so the models can be changed with `GEMINI_MODEL_TURN` and `GEMINI_MODEL_LIGHT`. The model names `gemini-3.8-flash` and the `medium` thinking level on it were taken from your description and have not been tested against the live API.
 
 
 ## First contact with a client

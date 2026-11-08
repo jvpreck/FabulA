@@ -1,5 +1,5 @@
 """MCP tools. Players use these, identified by their secret player key (see register_player).
-There are no administrator tools here: resolve_tick and the host commands live behind /internal/* (see app.py and admin.py)."""
+There are no administrator tools here: resolve_turn and the host commands live behind /internal/* (see app.py and admin.py)."""
 import functools
 import json
 
@@ -59,7 +59,7 @@ def register(mcp, engine: Engine):
     @_safe
     def get_guide(name: str = "", topic: str = "") -> dict:
         """Read a guide. Needs no key. name is one of: player-client-guide (how to use the engine and its tools), players-guide (how to play, for
-        the player; topic can be start, choose, character, commands, ticks, autonomous, death or mechanics), create-character,
+        the player; topic can be start, choose, character, commands, turns, autonomous, death or mechanics), create-character,
         create-game, generate-adventure, narrator (how to narrate and what to remember), mcp-guide (the short connection instructions), import-ruleset (convert a game system from a document). With no name it lists the guides."""
         return engine.guide(name, topic)
 
@@ -67,7 +67,7 @@ def register(mcp, engine: Engine):
     @_safe
     def get_setup_guide(topic: str = "") -> dict:
         """The guide for a new player (same as get_guide with name players-guide). Needs no key. topic is empty for the whole guide, or one of:
-        start, choose, character, commands, ticks, autonomous, death, mechanics. Relay it in the player's language and show only what was asked."""
+        start, choose, character, commands, turns, autonomous, death, mechanics. Relay it in the player's language and show only what was asked."""
         return engine.setup_guide(topic)
 
     @mcp.tool()
@@ -118,17 +118,17 @@ def register(mcp, engine: Engine):
     @mcp.tool()
     @_safe
     def create_game(player_key: str, adventure_id: str, title: str = "", language: str = "", display_name: str = "",
-                    lethality: str = "", tick_interval_hours: int = 0, tick_span: str = "", pvp: str = "", visibility: str = "",
-                    tick_close_hour: int = -2, tick_timezone: str = "") -> dict:
+                    lethality: str = "", turn_interval_hours: int = 0, turn_span: str = "", pvp: str = "", visibility: str = "",
+                    turn_close_hour: int = -2, turn_timezone: str = "") -> dict:
         """Start a new game run from an adventure. Returns a work package that collects the settings (lethality low, moderate or high; the default is high,
-        tick interval, the hour of the day a tick closes, pvp, language, visibility private or open) with the player; then send the result with submit_package.
-        tick_close_hour is 0 to 23 (hour of the day in tick_timezone, default Europe/Madrid, at which a tick of whole days closes; the default is 3, in the middle of
+        turn interval, the hour of the day a turn closes, pvp, language, visibility private or open) with the player; then send the result with submit_package.
+        turn_close_hour is 0 to 23 (hour of the day in turn_timezone, default Europe/Madrid, at which a turn of whole days closes; the default is 3, in the middle of
         the night) or -1 for no fixed hour. Optional arguments prefill defaults."""
-        s = {k: v for k, v in {"lethality": lethality, "tick_interval_hours": tick_interval_hours or None,
-                               "tick_span": tick_span, "pvp": pvp, "visibility": visibility,
-                               "tick_timezone": tick_timezone}.items() if v}
-        if tick_close_hour != -2:
-            s["tick_close_hour"] = tick_close_hour
+        s = {k: v for k, v in {"lethality": lethality, "turn_interval_hours": turn_interval_hours or None,
+                               "turn_span": turn_span, "pvp": pvp, "visibility": visibility,
+                               "turn_timezone": turn_timezone}.items() if v}
+        if turn_close_hour != -2:
+            s["turn_close_hour"] = turn_close_hour
         return engine.create_game(engine.authenticate(player_key), adventure_id, title or None, language or None, s, display_name or None)
 
     @mcp.tool()
@@ -165,13 +165,13 @@ def register(mcp, engine: Engine):
         character_submission, character_confirm (payload {approved}), standing_orders (payload {standing_orders, safety}),
         thread_note (payload {type, text}), message (payload {to, channel, text}), decision (payload {prompt_id, choice}),
         free_query, pause, resume (payload {choice}). Minor actions that affect only your character are resolved at once;
-        the rest wait for the tick. Returns the results now available to you."""
+        the rest wait for the turn. Returns the results now available to you."""
         return engine.submit_action(engine.authenticate(player_key), game_id, kind, text, character_id or None, payload)
 
     @mcp.tool()
     @_safe
     def get_results(player_key: str, game_id: str = "") -> dict:
-        """Collect results you have not received yet: tick results, what other characters did in front of yours, messages and speech.
+        """Collect results you have not received yet: turn results, what other characters did in front of yours, messages and speech.
         Call it at the start of every session and whenever the player asks what happened."""
         return engine.get_results(engine.authenticate(player_key), game_id or None)
 
@@ -184,7 +184,7 @@ def register(mcp, engine: Engine):
     @mcp.tool()
     @_safe
     def list_images(player_key: str, game_id: str) -> dict:
-        """The pictures of the story that the player's characters could see in this game: image_id, tick and caption."""
+        """The pictures of the story that the player's characters could see in this game: image_id, turn and caption."""
         return engine.list_images(engine.authenticate(player_key), game_id)
 
     @mcp.tool()
@@ -215,6 +215,6 @@ def register(mcp, engine: Engine):
 
     @mcp.tool()
     @_safe
-    def save_story_summary(player_key: str, game_id: str, character_id: str, text: str, tick: int = -1) -> dict:
+    def save_story_summary(player_key: str, game_id: str, character_id: str, text: str, turn: int = -1) -> dict:
         """Store the story summary you keep for the character, so it survives if the chat is compacted."""
-        return engine.save_story_summary(engine.authenticate(player_key), game_id, character_id, text, None if tick < 0 else tick)
+        return engine.save_story_summary(engine.authenticate(player_key), game_id, character_id, text, None if turn < 0 else turn)

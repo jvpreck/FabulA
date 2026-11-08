@@ -1,26 +1,26 @@
-# Manual trigger (Actions > tick > Run workflow) for the same call the Cloudflare Worker makes every 5 minutes: closes due ticks and draws queued pictures.
+# Manual trigger (Actions > turn > Run workflow) for the same call the Cloudflare Worker makes every 5 minutes: closes due turns and draws queued pictures.
 # The automatic schedule moved to Cloudflare because GitHub's scheduled runs were skipped for hours.
 # Repository secrets needed (Settings > Secrets and variables > Actions):
 #   SERVER_URL   the base URL of the deployed server, e.g. https://your-app.vercel.app  (no trailing slash)
 #   CRON_SECRET  the same value as the server's CRON_SECRET environment variable
 # Until both are set the job does nothing and succeeds.
-# Notes: GitHub runs scheduled workflows on a best-effort basis (a run can start several minutes late), which is fine for ticks of hours.
+# Notes: GitHub runs scheduled workflows on a best-effort basis (a run can start several minutes late), which is fine for turns of hours.
 # GitHub switches scheduled workflows off after 60 days without any repository activity: push anything, or run this one by hand, to wake it.
 # This repository is public, so the log shows counts only, never game ids or the response body.
-name: tick
+name: turn
 on:
-  workflow_dispatch:  # manual run only; the schedule is now the Cloudflare Worker in cloudflare/tick-worker (every 5 minutes)
+  workflow_dispatch:  # manual run only; the schedule is now the Cloudflare Worker in cloudflare/turn-worker (every 5 minutes)
 concurrency:
-  group: tick
+  group: turn
   cancel-in-progress: false
 permissions:
   contents: read
 jobs:
-  tick:
+  turn:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Resolve due ticks
+      - name: Resolve due turns
         env:
           SERVER_URL: ${{ secrets.SERVER_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -30,16 +30,16 @@ jobs:
             echo "SERVER_URL or CRON_SECRET is not set: nothing to do"
             exit 0
           fi
-          code=$(curl -sS -X POST "$SERVER_URL/internal/resolve_tick" \
+          code=$(curl -sS -X POST "$SERVER_URL/internal/resolve_turn" \
             -H "Authorization: Bearer $CRON_SECRET" --max-time 320 -o out.json -w "%{http_code}" || true)
           echo "HTTP $code"
           if [ "$code" = "504" ] || [ "$code" = "000" ]; then
-            # the server ran out of time; a tick left half-done is picked up again by the next run
-            echo "::warning::tick run timed out (HTTP $code); the next run retries"
+            # the server ran out of time; a turn left half-done is picked up again by the next run
+            echo "::warning::turn run timed out (HTTP $code); the next run retries"
             exit 0
           fi
           if [ "$code" != "200" ]; then
-            echo "the tick endpoint did not answer 200"
+            echo "the turn endpoint did not answer 200"
             exit 1
           fi
-          jq -r '"games checked: \(.checked // 0), ticks resolved: \([.results[]? | select(.resolved == true)] | length), ticks not resolved: \([.results[]? | select(.resolved != true)] | length), pictures drawn: \(.images.generated // 0)"' out.json
+          jq -r '"games checked: \(.checked // 0), turns resolved: \([.results[]? | select(.resolved == true)] | length), turns not resolved: \([.results[]? | select(.resolved != true)] | length), pictures drawn: \(.images.generated // 0)"' out.json

@@ -218,7 +218,7 @@ def ruleset_outline(ruleset_id="fear_itself") -> list:
 
 GUIDES = {
     "player-client-guide": ("guide_player_client.md", "How to use the engine (tools, order of calls, work packages, common mistakes)"),
-    "players-guide": ("setup_guide.md", "The guide for a new player (topics: start, choose, character, commands, ticks, autonomous, death, mechanics)"),
+    "players-guide": ("setup_guide.md", "The guide for a new player (topics: start, choose, character, commands, turns, autonomous, death, mechanics)"),
     "import-ruleset": ("guide_import_ruleset.md", "Converting a game system from a document into a ruleset (host approves it)"),
     "create-character": ("guide_create_character.md", "Making a character for a game"),
     "create-game": ("guide_create_game.md", "Starting a game from an adventure"),

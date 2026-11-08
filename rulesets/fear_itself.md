@@ -22,7 +22,7 @@ summary: Horror about ordinary people. Grounded and realistic by default; an adv
 >
 > Rules marked **[House]** are adaptations for AI-run play, small groups or realistic horror. They override the published rules where they differ. If you own the published book, you may use its tables instead of the House budgets in §2.
 >
-> **Asynchronous play.** These rules are applied by an AI Master who resolves each player's actions, some at once and the rest together at each tick. Where the published rules assume a live table, the [House] rules in §2.1 to §2.3, §4.2, §4.8, §4.10, §5.1, §5.3 and §6 adapt them.
+> **Asynchronous play.** These rules are applied by an AI Master who resolves each player's actions, some at once and the rest together at each turn. Where the published rules assume a live table, the [House] rules in §2.1 to §2.3, §4.2, §4.8, §4.10, §5.1, §5.3 and §6 adapt them.
 
 ---
 
@@ -37,9 +37,9 @@ summary: Horror about ordinary people. Grounded and realistic by default; an adv
   - **Slow Dread:** dread from atmosphere, routine gone wrong and small wrongnesses accumulating.
   - **Survival:** dread from a hostile place, scarce resources and a deadline.
 - **Realism rule (supernatural module off):** everything that happens has a rational cause that the GM knows. Fear comes from people, places, bodies, minds and lies. With the module on, the adventure's stated truth decides what is real (§10.1).
-- **Formats [House]:** the engine runs adventures as **one-shots** (one story, high body count), as **miniseries** (a fixed arc over several ticks or stories) or as **campaigns** (see §11).
+- **Formats [House]:** the engine runs adventures as **one-shots** (one story, high body count), as **miniseries** (a fixed arc over several turns or stories) or as **campaigns** (see §11).
 - **The Fear Itself mythology (optional, supernatural module only):** the **Outer Dark**, a dimension of suffering, is separated from our world by the **Membrane**, thinned by hopelessness, suffering and the erosion of human rationality; cultists and lunatics try to widen the breaches, and monsters are **Creatures of Unremitting Horror**. An adventure may use it, replace it with its own mythology, or use none.
-- **Asynchronous play [House]:** players submit actions, and at each tick the AI Master resolves all actions together with server dice, arbitrates conflicts (§6.3) and returns each player only what their character perceives. All state lives in the database.
+- **Asynchronous play [House]:** players submit actions, and at each turn the AI Master resolves all actions together with server dice, arbitrates conflicts (§6.3) and returns each player only what their character perceives. All state lives in the database.
 
 ---
 
@@ -111,8 +111,8 @@ A character reaches the game by one of three routes: **generated** with the AI M
 
 ### 2.3 Late joiners, losses and replacements [House]
 
-- **Late joiners** use the budgets for the party size at the start. Give them an in-world way into the story, designed by the AI Master (a friend of a character, an ally's request, a colleague posted to the case). They begin when the next tick opens.
-- **A dead character** (§4.10) is replaced in the same game by a new character the player chooses: a newly generated one, an unclaimed pregenerated one, or an NPC the AI Master has marked available (§9). A **Gone** or **committed** character is alive but out of play and can be replaced the same way. Generated and pregenerated replacements use the same budgets as everyone (party size at the start). The replacement arrives in the fiction within one or two ticks and does not inherit the other's knowledge, items or relationships.
+- **Late joiners** use the budgets for the party size at the start. Give them an in-world way into the story, designed by the AI Master (a friend of a character, an ally's request, a colleague posted to the case). They begin when the next turn opens.
+- **A dead character** (§4.10) is replaced in the same game by a new character the player chooses: a newly generated one, an unclaimed pregenerated one, or an NPC the AI Master has marked available (§9). A **Gone** or **committed** character is alive but out of play and can be replaced the same way. Generated and pregenerated replacements use the same budgets as everyone (party size at the start). The replacement arrives in the fiction within one or two turns and does not inherit the other's knowledge, items or relationships.
 - **Converting an NPC into a character.** Keep the NPC's name, role, trait, what they know and their inventory. Build the sheet from the NPC's tier (§9) by mapping its abilities, then fill the rest with the quick-creation steps within the budgets, and give the player the usual summary and confirmation. Ratings are never raised above the budgets to match an NPC's stats. The NPC stops acting as an NPC.
 - **A player who leaves** turns their character into a GM-run ally who stays safe or departs plausibly. A player who returns later may reclaim the character if the fiction allows.
 
@@ -160,7 +160,7 @@ Typical spend benefits: extra information; skipping a scene or compressing an er
 - **Piggybacking:** followers each pay 1 point to go along with a leader's test; each follower who cannot pay raises the Difficulty by 2.
 - **Investigative spends** can lower a General Difficulty by 1.
 - **Weather, light and terrain** shift Difficulty by 1.
-- **Declared spends [House, asynchronous].** Players cannot answer mid-tick, so spends are those the action declares, or the standing default spends. Apply them as declared, each +1 before the roll. Never apply more than declared or more than the pool holds. Investigative spends that lower a Difficulty are also declared in the action.
+- **Declared spends [House, asynchronous].** Players cannot answer mid-turn, so spends are those the action declares, or the standing default spends. Apply them as declared, each +1 before the roll. Never apply more than declared or more than the pool holds. Investigative spends that lower a Difficulty are also declared in the action.
 - **Dice [House].** The AI Master rolls every die, using only the server's dice stream, in order. Each roll is reported without its Difficulty (the Difficulty may be revealed afterwards if the player asks). A roll report shows the ability, the spend, the die, the total and the outcome: success, narrow success, failure, narrow failure or auto-fail.
 
 ### 4.3 Contests and chases
@@ -170,7 +170,7 @@ Each side rolls in turn; **first to fail loses.** The fleeing character acts fir
 
 **Escape Pool [House]** (optional, when trapped and trying to leave a place): start at 0, shared by the group; gain 1 to 3 per way-out clue, +1 per relevant Investigative spend, +1 per successful relevant General test; Difficulty is **6 plus 2 per escaping character** (8 for a single escapee; lower with a group that helps); one roll per attempt; failure empties the pool and triggers a hazard. Characters who escape leave the adventure.
 
-In asynchronous play each roll in a contest uses the next values from the server dice stream. An Escape Pool attempt is one roll per tick unless the action declares more.
+In asynchronous play each roll in a contest uses the next values from the server dice stream. An Escape Pool attempt is one roll per turn unless the action declares more.
 
 ### 4.4 Fighting (to be avoided)
 Violence is a failure state or a threat, not a solution, especially for characters without Scuffling or Shooting.
@@ -282,9 +282,9 @@ A Stage 2 hazard effect (§4.6) counts as +1 Drift while it lasts.
 **Immersion (Drift 5) and the Surface test.** At Drift 5 the character believes the delusion. Narrate in the shared voice: relief, warmth, kindness, the explanation arriving. Offer one clear moment of doubt per Block as a **Surface test**: a Stability test at Difficulty 6, spends allowed. Success lowers effective Drift to 4 until the character leaves the zone. Failure means they act with the crowd for a beat. A character still at Drift 5 at the finale without a successful Surface joins the group's action unless the player spends a Hard Risk Factor or accepts being Lost (§4.7).
 
 **Asynchronous handling [House].**
-- **Exposure accounting.** At the end of each Block of the tick, add the Exposure Points for the zone the character spent it in and the day's intensity (the adventure's table), then subtract recovery. Record the totals in the character's GM-only state. Never show EP or Drift as numbers.
-- **Slips** are delivered in the facts as ordinary perceived events with their tell. Record each one, GM-only, in the character's `gm_only.slips` with the tick, the text and the tell.
-- **Automatic Check Reality.** Players cannot respond mid-tick, so the character attempts one Check Reality automatically for each Slip, using the anchor and the optional Investigative spend named in the standing orders (§6.4). If the standing orders say `believe`, skip the test: the Slip costs 1 Stability and the false perception stands for a beat. The result goes in the roll report. A success is stated plainly in the facts.
+- **Exposure accounting.** At the end of each Block of the turn, add the Exposure Points for the zone the character spent it in and the day's intensity (the adventure's table), then subtract recovery. Record the totals in the character's GM-only state. Never show EP or Drift as numbers.
+- **Slips** are delivered in the facts as ordinary perceived events with their tell. Record each one, GM-only, in the character's `gm_only.slips` with the turn, the text and the tell.
+- **Automatic Check Reality.** Players cannot respond mid-turn, so the character attempts one Check Reality automatically for each Slip, using the anchor and the optional Investigative spend named in the standing orders (§6.4). If the standing orders say `believe`, skip the test: the Slip costs 1 Stability and the false perception stands for a beat. The result goes in the roll report. A success is stated plainly in the facts.
 - **Surface test** (Drift 5) is also automatic, once per Block, with the spend declared in the standing orders. At the finale, a character still at Drift 5 without a successful Surface test joins the group's action unless the action has spent a Hard Risk Factor or accepted being Lost.
 - **Notebook.** The AI Master adds a `notebook_entry` to the result whenever the rule above calls for one. Comparing entries with memory at a Haven is a free query.
 - **Lost time** removes one Block action from the remainder of the action, never more than half a Block of fiction, and only after a warning cue.
@@ -316,13 +316,13 @@ In party play, Heat is shared by the group and tracked in the game's GM-only sta
 - A **clock** is a deadline the adventure defines (a date, a ritual, a transfer, a storm). The clock runs whether or not characters act. A **ticking clock** advances one step when a character fails forward, wastes a Block or raises Heat.
 - The schedule is a ceiling, not a track: if characters act sooner, move the beats.
 
-**Ticks [House, asynchronous].**
-- A **tick** is one resolution cycle. All submitted actions resolve together when it closes. The table sets the **tick interval** (real time between resolutions, default 24 hours) and the **tick span** (the in-game time one tick covers).
-- **Tick span.** `day` (default): four Blocks, so an action may hold up to four Block actions (Morning, Afternoon, Evening, Night). `block`: one Block per tick, for slower and finer play. `beat`: a crisis tick covering a few minutes of game time.
-- **Block budget.** Each action costs one Block unless an Investigative spend compresses it. A character may fill fewer Blocks than the span allows, and the rest is rest or routine. Blocks used by actions resolved at once (protocol §5.3) are spent and cannot be used again in the tick.
-- **Early close.** If the table enables it, the tick resolves as soon as every active player has used the Blocks they intend. Otherwise it resolves at the deadline.
-- **Crisis mode.** At a finale, a chase or an emergency, the AI Master may switch to crisis ticks. The tick span becomes a Beat (about five minutes) or a short group of Beats. The action lists what the character does Beat by Beat with contingencies, and decision gates stop the action at the points of no return. The tick interval may be shortened if the table agrees. The adventure says when crisis mode applies.
-- **Time passes for everyone.** A missed tick still advances the clock. The character holds (§6.4).
+**Turns [House, asynchronous].**
+- A **turn** is one resolution cycle. All submitted actions resolve together when it closes. The table sets the **turn interval** (real time between resolutions, default 24 hours) and the **turn span** (the in-game time one turn covers).
+- **Turn span.** `day` (default): four Blocks, so an action may hold up to four Block actions (Morning, Afternoon, Evening, Night). `block`: one Block per turn, for slower and finer play. `beat`: a crisis turn covering a few minutes of game time.
+- **Block budget.** Each action costs one Block unless an Investigative spend compresses it. A character may fill fewer Blocks than the span allows, and the rest is rest or routine. Blocks used by actions resolved at once (protocol §5.3) are spent and cannot be used again in the turn.
+- **Early close.** If the table enables it, the turn resolves as soon as every active player has used the Blocks they intend. Otherwise it resolves at the deadline.
+- **Crisis mode.** At a finale, a chase or an emergency, the AI Master may switch to crisis turns. The turn span becomes a Beat (about five minutes) or a short group of Beats. The action lists what the character does Beat by Beat with contingencies, and decision gates stop the action at the points of no return. The turn interval may be shortened if the table agrees. The adventure says when crisis mode applies.
+- **Time passes for everyone.** A missed turn still advances the clock. The character holds (§6.4).
 - **Scheduled events** fire at their Block whether or not a character is there. If nobody is in position to receive one, the world delivers it by other means (a message, a witness, a note) so essential clues are not lost.
 
 ### 5.4 Belief states for NPCs and crowds [House]
@@ -347,17 +347,17 @@ Devout and Frenzied NPCs are sincere, not cackling villains. A crowd acts as one
 1. **One viewpoint.** Every thread is narrated through the character. No cutaways.
 2. **Allies advise and assist; the character decides.** A GM-run ally never rolls for the player, never overrides a choice, and does not solve a problem the player has not engaged with.
 3. **Spotlight is automatic.** Use the freed attention to deepen NPCs and consequences, not to add filler.
-4. **Own pace.** With early close on, the tick resolves when the player has used the Blocks they intend. The player chooses how fast the game moves.
+4. **Own pace.** With early close on, the turn resolves when the player has used the Blocks they intend. The player chooses how fast the game moves.
 5. **Directed scenes and flashbacks** only to dramatize a Source of Stability, a Risk Factor or the goal, and only if consistent with established facts.
 6. **The clock is real.** An character cannot do everything.
 7. **Fail forward, not fail free.** A failed test costs time, access, trust, safety or evidence; it never halts the investigation or erases an essential clue.
 8. **Be honest and fair.** The AI Master never fudges a roll. Difficulty is chosen *before* the roll. Warnings precede lethal danger.
 9. **Death and ruin.** If the character dies or is Gone (§4.10), present it with weight, resolve what happens to the people at stake and the evidence, then offer a replacement, a debrief or a restart. Do not silently reverse it.
-10. **Pacing.** Aim for roughly 12 to 16 meaningful scenes across the adventure's ticks: investigation first, then the build, then the finale and a short epilogue.
+10. **Pacing.** Aim for roughly 12 to 16 meaningful scenes across the adventure's turns: investigation first, then the build, then the finale and a short epilogue.
 
 ### 6.2 Party [House]
-1. **Parallel threads.** Every character acts every tick. Group characters by place into threads and resolve each. Give every player a result of similar weight and a hook for the next tick.
-2. **Splitting the party.** Allowed. Every thread resolves every tick, so nobody waits in a dead scene.
+1. **Parallel threads.** Every character acts every turn. Group characters by place into threads and resolve each. Give every player a result of similar weight and a hook for the next turn.
+2. **Splitting the party.** Allowed. Every thread resolves every turn, so nobody waits in a dead scene.
 3. **Group tests.** A test affecting everyone is rolled by each affected character separately (stealth, scares), with separate dice. A helper's contribution follows §4.2.
 4. **Disagreement.** Players may argue in character. The AI Master does not resolve disagreements for them. Each character does what their own action says and bears the consequences.
 5. **Shared knowledge.** Players are separate people. Knowledge moves between characters only in the fiction: by speaking, by a message, or by showing a document. It arrives as hearsay tagged with its source.
@@ -388,9 +388,9 @@ One world, one truth. Order first, dice second. Nobody's action is dropped.
 ### 6.4 Standing orders, absent and paused players [House]
 
 - **Standing orders** are stored in each character's record (`settings.standing_orders`) and can be changed at any time. Fields: `hold` (a short text: where to stay and what to do when the player is absent), `risk_tolerance` (`low`, `medium`, `high`), `perception_check` (`auto` or `believe`, with an optional `anchor` and `spend`), `default_spends` (for example Sense Trouble 1 each Block), `never_do` (a list of things the character will not do), and `reply_to_messages` (true or false). The default is: stay safe, rest, take no risks, `perception_check: auto`.
-- **A missed tick.** Apply the standing orders. If there are none, the character **holds**: stays where they are or returns to their lodging, rests (a Haven is possible), keeps to routine, declines risky invitations, and takes no irreversible or dangerous action. A task the player marked `continue until told` (for example a long archive search) continues.
+- **A missed turn.** Apply the standing orders. If there are none, the character **holds**: stays where they are or returns to their lodging, rests (a Haven is possible), keeps to routine, declines risky invitations, and takes no irreversible or dangerous action. A task the player marked `continue until told` (for example a long archive search) continues.
 - **Absent characters** are never killed, committed or Shattered by inaction, take no lethal risk, and are not chosen as the target of a finale outcome unless their player walked past a decision gate. They may suffer ordinary world consequences: time passing, Heat, a missed meeting.
-- **Consecutive misses.** After 3 missed ticks the player is `away`: the character withdraws to a safe, plausible place. After 6, ask the host whether to drop the player. A `dropped` player's character becomes a GM-run ally or leaves the story (§2.3).
+- **Consecutive misses.** After 3 missed turns the player is `away`: the character withdraws to a safe, plausible place. After 6, ask the host whether to drop the player. A `dropped` player's character becomes a GM-run ally or leaves the story (§2.3).
 - **Paused players.** When a player sends `pause`, their character holds out of danger and their next result contains only an out-of-character check-in. The game continues for the others unless the host pauses it.
 
 ---
@@ -433,11 +433,11 @@ Every adventure declares its **era, place and tone**. Use this checklist and let
 - **Pacing a one-shot:** open with a scene where the characters meet; budget three to five major scenes; give each character a moment to shine; finale and aftermath are about the last fifth of the adventure. Tools: explicit time limits, floating essential clues and **forced moves** (everyone blacks out and wakes at the finale location).
 - **Rational ambiguity (supernatural module off):** characters may never verify every detail, and fear may outrun evidence, but the GM always knows the rational truth and no clue may contradict it. Imagined monsters and gods belong to the characters' minds and to the beliefs of NPCs.
 - **Asynchronous craft.**
-  - Give every player something to act on in every tick.
-  - Build each essential conclusion with routes that suit different characters' abilities, so a missed tick or a split party never stalls the story.
+  - Give every player something to act on in every turn.
+  - Build each essential conclusion with routes that suit different characters' abilities, so a missed turn or a split party never stalls the story.
   - End each result on a hook or a decision.
   - Use delay as drama: letters, telephone queues and visiting hours turn waiting into pressure instead of dead time.
-  - Foreshadow across ticks. A tell planted in one tick can pay off in the next.
+  - Foreshadow across turns. A tell planted in one turn can pay off in the next.
 
 ---
 
@@ -456,7 +456,7 @@ NPCs have no full sheets. Record only what play needs.
 | Dangerous | soldier, killer, brawler | 8 | Athletics 8, Scuffling 6, Shooting 5 | 4 |
 | Creature *(supernatural module)* | see §10.5 and Appendix C | by creature | **Aberrance**, Athletics, Scuffling | 3 to 5 |
 
-- **NPC tests.** When an NPC acts against a character, roll a d6 from the stream plus the relevant rating against the character's Difficulty, or in a contest (§4.3). Ordinary NPCs do not spend points. A named antagonist may spend up to 2 points per tick, noted in the GM-only notes.
+- **NPC tests.** When an NPC acts against a character, roll a d6 from the stream plus the relevant rating against the character's Difficulty, or in a contest (§4.3). Ordinary NPCs do not spend points. A named antagonist may spend up to 2 points per turn, noted in the GM-only notes.
 - **Social outcomes** between characters and NPCs use the characters' Investigative abilities and the NPC's disposition and belief state, not NPC rolls.
 - **Crowds** are handled in narration, not with stat blocks.
 - **Recording.** Every NPC stat block lives in the NPC's record (state contract §3.3 and §3.6). Update Health and belief states as they change.
@@ -501,7 +501,7 @@ Psychic powers work as **Investigative abilities**: a 0-point clue is free, and 
 - **Refresh:** a creature's pools refresh every 24 hours (half if the characters come back the same day). Stats are guidelines: adjust Health and Aberrance on the fly. About 3 points is one guaranteed success. A lower Aberrance with a way to refresh it is better than a huge pool, and attack patterns can be planned in advance. Most creatures should be beatable; high Armor is 2 or 3.
 - **All That Remains:** the adventure lists what evidence the creature leaves, by ability (a wound, a smell, a witness, a pattern). Some creatures have a **Special Means of Dispatch** (a specific weakness, tool or rite).
 - **Designing a creature:** give it a hook (a grisly discovery, a witness, what brought it through, humans using it) and answer who it is, where it is, what it wants, how it can be killed and how to escape it. Descriptive modes: creepy, gory, freaky, disgusting, spooky, pitiful, harrowing (it invades their lives) and unstoppable. Aim for fresh, modern, psychosexual unease rather than cuddly cosmic horror.
-- **Using creatures in play [House].** The AI Master rolls creature tests from the server dice stream, after the characters in each Block (§6.3, rule 12). A creature may spend Aberrance up to the amount its notes allow per tick. A creature never kills or finishes a downed character without the lethality rules of §4.10 (a warning cue and, at `low` and `moderate`, a decision gate or a chance to withdraw). A creature that cannot be beaten by the characters must have an escape in the adventure.
+- **Using creatures in play [House].** The AI Master rolls creature tests from the server dice stream, after the characters in each Block (§6.3, rule 12). A creature may spend Aberrance up to the amount its notes allow per turn. A creature never kills or finishes a downed character without the lethality rules of §4.10 (a warning cue and, at `low` and `moderate`, a decision gate or a chance to withdraw). A creature that cannot be beaten by the characters must have an escape in the adventure.
 - Creature records live in the NPC record (`base_stats` and `npc_state.stats`, Appendix B).
 
 ### 10.6 Stability with the supernatural
@@ -520,7 +520,7 @@ Psychic powers work as **Investigative abilities**: a 0-point clue is free, and 
 ## 11. Formats, campaigns and advancement [House]
 
 - **One-shot.** One story, a claustrophobic premise (a remote base, a hospital, a haunted house), a high body count, pregenerated characters or stereotypes (§2.1a) and one Source of Stability (a person). See §8 for pacing.
-- **Miniseries.** A fixed number of ticks or stories (three to eight). Prepare a pitch: title, logline, setting, suggested and forbidden character types, tone. Build a list of **revelations** spread across the episodes, leave blanks for the players' own elements, use questionnaire answers to build the setting, keep floating clues and a forced move so the climax happens, and let the finale be in the players' hands. Each character gets a spotlight episode that complicates early and converges late. Supporting characters carry three traits (a habit, a descriptive hook, a tic or speech trait), layered public, discoverable and secret information, and a personal goal.
+- **Miniseries.** A fixed number of turns or stories (three to eight). Prepare a pitch: title, logline, setting, suggested and forbidden character types, tone. Build a list of **revelations** spread across the episodes, leave blanks for the players' own elements, use questionnaire answers to build the setting, keep floating clues and a forced move so the climax happens, and let the finale be in the players' hands. Each character gets a spotlight episode that complicates early and converges late. Supporting characters carry three traits (a habit, a descriptive hook, a tic or speech trait), layered public, discoverable and secret information, and a personal goal.
 - **Campaign.** The question is **why the characters keep returning to the horror**: a murdered friend, a cursed family, a therapy group, a ghost-hunting team, a plot dispenser (a radio host, a detective agency's door). Episodic campaigns are self-contained mysteries; ongoing ones are serialized and need recaps; most are mixed. **Factions** (cults, syndicates, occultists, corporations, conspiracies, mostly human) each list an ultimate goal and the steps toward it, and how each step could trigger an investigation. Give each character two or three ordinary supporting characters with real problems, and do not make them supernatural or kill them casually.
 - **Advancement (campaign).** **2 build points per story played**, spent on either type of ability. Optionally, players give each other bonus tokens for great play (a token is 1 build point or a refresh of 2 points). A sheet raised this way must still pass the checklist of §2.1 against the raised budgets. The engine does not yet automate advancement: the AI Master applies it as a `merge` after the player confirms.
 - **Carrying characters between adventures.** A table may run a campaign as a sequence of adventures that carry the character along (§2.1, "Carrying a character between adventures").
@@ -595,11 +595,11 @@ The state contract fixes the outer shape of a character. This ruleset fills thre
 **`ruleset_state`**
 - `sources_of_stability`: `[{ "name", "kind": "person|trait|activity|place|object", "unlocked": bool, "last_used_day": n|null }]`.
 - `haven`: `{ "last_used_day": n|null, "breached": bool }`.
-- `risk_factor_paid`: a list of ticks when a Risk Factor cost was paid.
+- `risk_factor_paid`: a list of turns when a Risk Factor cost was paid.
 - `powers` *(supernatural module only)*: `[{ "name", "source": "bought|granted", "pool": { "max": n, "cur": n }, "cost_per_use": "…", "refresh": "…", "notes": "…" }]`. Psychic powers bought from the budgets also appear in `sheet.groups` as ordinary abilities; adventure-granted powers appear only here.
 
 **`gm_only`** (never shown)
-- `ep` (Exposure Points), `drift` (level 0 to 5), `slips` (each `{ "tick", "text", "tell" }`), `heat_marks`, `surface_tests`, `flags`.
+- `ep` (Exposure Points), `drift` (level 0 to 5), `slips` (each `{ "turn", "text", "tell" }`), `heat_marks`, `surface_tests`, `flags`.
 
 **NPC `base_stats` and `npc_state.stats`** use the tiers of §9: `tier`, `health`, `stability` (or `null`), `abilities`, `hit_threshold`, `weapon_mod`. A creature (supernatural module) adds `aberrance`, `armor`, `awareness_mod`, `stealth_mod`, `damage_mod` and `special` (a list of its powers).
 

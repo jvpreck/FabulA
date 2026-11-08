@@ -1,4 +1,4 @@
-"""ASGI app: the MCP endpoint (/mcp), shared-key middleware, and the protected tick endpoint (/internal/resolve_tick)."""
+"""ASGI app: the MCP endpoint (/mcp), shared-key middleware, and the protected turn endpoint (/internal/resolve_turn)."""
 import hmac
 import json
 import os
@@ -61,10 +61,10 @@ def _matches(secret, candidates):
 
 
 class Gateway:
-    """Authentication and the internal tick endpoint, in front of the MCP app.
+    """Authentication and the internal turn endpoint, in front of the MCP app.
 
     /mcp and everything else: shared key (`Authorization: Bearer`, `x-api-key` or `?key=`), MCP_API_KEY.
-    /internal/resolve_tick: CRON_SECRET only (Bearer). /internal/admin: ADMIN_SECRET only (Bearer), host commands (see admin.py).
+    /internal/resolve_turn: CRON_SECRET only (Bearer). /internal/admin: ADMIN_SECRET only (Bearer), host commands (see admin.py).
     Each secret fails closed when unset. 403, not 401, so clients do not start OAuth.
     """
 
@@ -126,11 +126,11 @@ class Gateway:
         if path.startswith("/internal/"):
             if not self._cron_ok(scope):
                 return await self._json(send, 403, {"error": "forbidden"})
-            if path == "/internal/resolve_tick":
+            if path in ("/internal/resolve_turn", "/internal/resolve_tick"):  # the old path stays until the Cloudflare Worker is redeployed
                 q = parse_qs(scope.get("query_string", b"").decode())
                 gid = (q.get("game_id") or [None])[0]
                 try:
-                    out = self.engine.resolve_tick(gid) if gid else self.engine.resolve_due()
+                    out = self.engine.resolve_turn(gid) if gid else self.engine.resolve_due()
                 except Exception as e:
                     return await self._json(send, 500, {"error": str(e)[:300]})
                 return await self._json(send, 200, out)

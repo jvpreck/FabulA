@@ -14,24 +14,24 @@ ADVENTURES_CACHE_SECONDS = int(os.environ.get("ADVENTURES_CACHE_SECONDS", "300")
 ADVENTURES_DIR = Path(os.environ["ADVENTURES_DIR"]) if os.environ.get("ADVENTURES_DIR") else None
 RULESETS_DIR = ROOT / "rulesets"
 
-# Two tiers. "tick" is the strong, scarce model: closing a tick with every player's actions, and checking a character sheet.
-# "light" is the fast, plentiful model: everything a single player does between ticks. GEMINI_MODEL is the old name for the light model.
-GEMINI_MODEL_TICK = os.environ.get("GEMINI_MODEL_TICK", "gemini-3.8-flash")
+# Two tiers. "turn" is the strong, scarce model: closing a turn with every player's actions, and checking a character sheet.
+# "light" is the fast, plentiful model: everything a single player does between turns. GEMINI_MODEL is the old name for the light model.
+GEMINI_MODEL_TURN = os.environ.get("GEMINI_MODEL_TURN", "gemini-3.8-flash")
 GEMINI_MODEL_LIGHT = os.environ.get("GEMINI_MODEL_LIGHT") or os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
 GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "medium")
-GEMINI_THINKING_LEVEL_TICK = os.environ.get("GEMINI_THINKING_LEVEL_TICK", GEMINI_THINKING_LEVEL)
+GEMINI_THINKING_LEVEL_TURN = os.environ.get("GEMINI_THINKING_LEVEL_TURN", GEMINI_THINKING_LEVEL)
 # Free-tier quotas with a little headroom (the provider's figures were 20 per day and 5 per minute, 500 per day and 10 per minute).
 GEMINI_LIMITS = {
-    "tick": {"rpd": int(os.environ.get("GEMINI_TICK_RPD", "18")), "rpm": int(os.environ.get("GEMINI_TICK_RPM", "4"))},
+    "turn": {"rpd": int(os.environ.get("GEMINI_TURN_RPD", "18")), "rpm": int(os.environ.get("GEMINI_TURN_RPM", "4"))},
     "light": {"rpd": int(os.environ.get("GEMINI_LIGHT_RPD", "450")), "rpm": int(os.environ.get("GEMINI_LIGHT_RPM", "9"))},
     # images: Cloudflare gives 10,000 Neurons a day. klein 4B costs about 26 per 512 output tile, 5 per input tile: a 1024 picture with
     # references is about 120, a 512 reference about 26. Calls per day are kept low enough for a mix of both.
     "image": {"rpd": int(os.environ.get("IMAGE_RPD", "80")), "rpm": int(os.environ.get("IMAGE_RPM", "10"))},
 }
-TICK_TIMEZONE = os.environ.get("TICK_TIMEZONE", "Europe/Madrid")  # where "the hour a tick closes" is counted
-TICK_CLOSE_HOUR = int(os.environ.get("TICK_CLOSE_HOUR", "3"))  # default hour (0-23) for games whose tick is a whole number of days; -1 = exactly one interval after opening
+TURN_TIMEZONE = os.environ.get("TURN_TIMEZONE", "Europe/Madrid")  # where "the hour a turn closes" is counted
+TURN_CLOSE_HOUR = int(os.environ.get("TURN_CLOSE_HOUR", "3"))  # default hour (0-23) for games whose turn is a whole number of days; -1 = exactly one interval after opening
 GEMINI_QUOTA_TZ = "America/Los_Angeles"  # provider quotas reset at midnight Pacific
-QUOTA_TZ = {"tick": GEMINI_QUOTA_TZ, "light": GEMINI_QUOTA_TZ, "image": "UTC"}  # Cloudflare's free allowance resets at 00:00 UTC
+QUOTA_TZ = {"turn": GEMINI_QUOTA_TZ, "light": GEMINI_QUOTA_TZ, "image": "UTC"}  # Cloudflare's free allowance resets at 00:00 UTC
 
 # Illustrations (Cloudflare Workers AI, FLUX.2 klein 4B, which accepts reference images). Needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN; without them the option is unavailable.
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "@cf/black-forest-labs/flux-2-klein-4b")
@@ -42,14 +42,14 @@ IMAGE_STYLE = os.environ.get("IMAGE_STYLE", "Atmospheric painterly illustration,
 IMAGE_BUCKET = os.environ.get("IMAGE_BUCKET", "gm-images")
 IMAGE_INLINE_SIZE = int(os.environ.get("IMAGE_INLINE_SIZE", "768"))  # longest side of a picture returned inline in a tool result
 IMAGE_URL_TTL_SECONDS = int(os.environ.get("IMAGE_URL_TTL_SECONDS", "900"))
-IMAGES_PER_TICK = int(os.environ.get("IMAGES_PER_TICK", "4"))  # most the AI Master may ask for in one response
+IMAGES_PER_TURN = int(os.environ.get("IMAGES_PER_TURN", "4"))  # most the AI Master may ask for in one response
 IMAGES_PER_RUN = int(os.environ.get("IMAGES_PER_RUN", "6"))  # generation calls, a portrait takes four  # most generated per scheduler run, to stay inside the function time
 IMAGE_MAX_ATTEMPTS = 2
 PORTRAITS_PER_RESPONSE = 3
 STYLE_MIN, STYLE_MAX = 40, 700
 IMAGE_TIMEOUT_SECONDS = 25
 FUNCTION_BUDGET_SECONDS = int(os.environ.get("FUNCTION_BUDGET_SECONDS", "240"))  # Vercel maxDuration is 300 (see vercel.json)
-TICK_RESERVE_SECONDS = int(os.environ.get("TICK_RESERVE_SECONDS", "110"))  # no new tick is started with less than this left
+TURN_RESERVE_SECONDS = int(os.environ.get("TURN_RESERVE_SECONDS", "110"))  # no new turn is started with less than this left
 GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "100"))  # one model call must never outlive the function
 GEMINI_RETRIES = int(os.environ.get("GEMINI_RETRIES", "3"))  # extra attempts after a transient Gemini error (503 "high demand", 500, 502, 504)
 GEMINI_RETRY_BASE_SECONDS = float(os.environ.get("GEMINI_RETRY_BASE_SECONDS", "2"))  # waits are base, 3x base, 9x base, with jitter

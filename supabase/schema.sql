@@ -21,7 +21,7 @@ create table if not exists gm_locations (
 
 create table if not exists gm_games (
   id text primary key, data jsonb not null, version int not null default 1,
-  phase text, tick_closes timestamptz, updated_at timestamptz not null default now());
+  phase text, turn_closes timestamptz, updated_at timestamptz not null default now());
 
 create table if not exists gm_characters (
   id text primary key, data jsonb not null, version int not null default 1,
@@ -38,7 +38,7 @@ create table if not exists gm_location_states (
 
 create table if not exists gm_submit_actions (
   id text primary key, data jsonb not null, version int not null default 1,
-  game_id text not null, tick int not null, updated_at timestamptz not null default now());
+  game_id text not null, turn int not null, updated_at timestamptz not null default now());
 
 create table if not exists gm_tasks (
   id text primary key, data jsonb not null, version int not null default 1,
@@ -49,8 +49,8 @@ create index if not exists gm_characters_game on gm_characters (game_id);
 create index if not exists gm_characters_player on gm_characters (player_id);
 create index if not exists gm_npc_states_game on gm_npc_states (game_id);
 create index if not exists gm_location_states_game on gm_location_states (game_id);
-create index if not exists gm_submit_actions_game on gm_submit_actions (game_id, tick);
-create index if not exists gm_games_due on gm_games (phase, tick_closes);
+create index if not exists gm_submit_actions_game on gm_submit_actions (game_id, turn);
+create index if not exists gm_games_due on gm_games (phase, turn_closes);
 
 alter table gm_players enable row level security;
 alter table gm_adventures enable row level security;

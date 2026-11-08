@@ -12,7 +12,7 @@ class ApplyError(Exception):
 # Paths the GM may never write (the server owns them).
 FORBIDDEN_TOP = {
     "character": {"inbox", "client_sync", "events", "decisions", "player_id", "game_id"},
-    "game": {"events", "decisions", "messages", "ticks", "id", "adventure_id", "ruleset_id"},
+    "game": {"events", "decisions", "messages", "turns", "id", "adventure_id", "ruleset_id"},
 }
 GM_ENTITIES = {"game", "character", "npc_state", "location_state", "npc", "location"}
 OPS = {"upsert", "merge", "adjust", "append", "remove"}
@@ -75,7 +75,7 @@ def character_defaults(game_id, player_id, adventure_id, ruleset_id, character_i
         "adventure_id": adventure_id, "ruleset_id": ruleset_id, "name": name, "origin": "generated",
         "status": "draft", "is_alive": True, "death": None, "replaces_character_id": None,
         "replaced_by_character_id": None, "from_npc_id": None,
-        "participation": {"role": "player", "status": "active", "joined_tick": 0, "missed_ticks": 0, "last_submitted_tick": None},
+        "participation": {"role": "player", "status": "active", "joined_turn": 0, "missed_turns": 0, "last_submitted_turn": None},
         "language": language,
         "settings": {"safety": {"fears": [], "pvp_optout": False, "stop_signal": "pause"},
                      "standing_orders": {"hold": "Stay safe, rest, take no risks.", "risk_tolerance": "low",
@@ -86,8 +86,8 @@ def character_defaults(game_id, player_id, adventure_id, ruleset_id, character_i
         "run_notes": {"known_gaps": [], "promises": [], "debts": [], "scars": [], "goals_progress": "", "other": {}},
         "knowledge": {"facts": [], "clues": [], "documents": [], "threads": [], "spend_offers": [], "journal": "", "met": []},
         "decisions": [], "events": [], "inbox": [],
-        "tick_state": {"tick": 0, "blocks_used": [], "queued_action_ids": [], "autonomous_action_ids": []},
-        "client_sync": {"version": 1, "story_summary": "", "story_summary_tick": 0, "updated_at": None},
+        "turn_state": {"turn": 0, "blocks_used": [], "queued_action_ids": [], "autonomous_action_ids": []},
+        "client_sync": {"version": 1, "story_summary": "", "story_summary_turn": 0, "updated_at": None},
         "gm_only": {},
     }
 
@@ -265,7 +265,7 @@ class Applier:
                 text = cs.get(cid)
                 if not c or not text:
                     continue
-                c["events"].append({"id": ev["id"], "tick": ev.get("tick"), "day": ev.get("day"), "block": ev.get("block"),
+                c["events"].append({"id": ev["id"], "turn": ev.get("turn"), "day": ev.get("day"), "block": ev.get("block"),
                                     "location_id": ev.get("location_id"), "summary": text})
                 self._touch_char(c)
 
@@ -281,11 +281,11 @@ class Applier:
                 c["decisions"].append(safe)
                 self._touch_char(c)
 
-    def apply_messages(self, game, messages, characters_by_id, tick):
+    def apply_messages(self, game, messages, characters_by_id, turn):
         for m in messages or []:
             m = copy.deepcopy(m)
             m.setdefault("id", new_id("m"))
-            m.setdefault("sent_tick", tick)
+            m.setdefault("sent_turn", turn)
             m.setdefault("status", "pending")
             game["messages"].append(m)
             if m.get("status") == "delivered" and m.get("to") in characters_by_id:
@@ -294,7 +294,7 @@ class Applier:
                     "kind": "message", "language": c.get("language"),
                     "facts": [{"block": None, "kind": "dialogue",
                                "text": f"A message from {self._name(m.get('from'), characters_by_id)} by {m.get('channel')}: \"{m.get('text')}\""}],
-                    "prompts": [], "narration_hints": {"mood": "", "pace": "", "senses": [], "do_not": []}}, tick)
+                    "prompts": [], "narration_hints": {"mood": "", "pace": "", "senses": [], "do_not": []}}, turn)
 
     @staticmethod
     def _name(id_, chars):
@@ -305,8 +305,8 @@ class Applier:
         self.ws.touch("character", c["id"])
         self.touched.add(c["id"])
 
-    def add_inbox(self, game, character, kind, result, tick):
-        item = {"id": new_id("r"), "tick": tick, "kind": kind, "delivered": False,
+    def add_inbox(self, game, character, kind, result, turn):
+        item = {"id": new_id("r"), "turn": turn, "kind": kind, "delivered": False,
                 "created_at": self.now, "result": result}
         character["inbox"].append(item)
         hints = result.get("narration_hints") if isinstance(result, dict) else None
@@ -315,15 +315,15 @@ class Applier:
         self._touch_char(character)
         return item
 
-    def add_setup_inbox(self, game, player_id, result, tick):
-        item = {"id": new_id("r"), "tick": tick, "kind": "system", "delivered": False,
+    def add_setup_inbox(self, game, player_id, result, turn):
+        item = {"id": new_id("r"), "turn": turn, "kind": "system", "delivered": False,
                 "created_at": self.now, "result": result}
         game.setdefault("setup", {"answers": {}, "inbox": {}}).setdefault("inbox", {}).setdefault(player_id, []).append(item)
         self.ws.touch("game", game["id"])
 
-    def apply_results(self, game, results, characters_by_id, tick, store_in_tick=False):
+    def apply_results(self, game, results, characters_by_id, turn, store_in_turn=False):
         players = {c["player_id"] for c in characters_by_id.values()} | {r.get("player_id") for r in game.get("roster", [])}
-        entry = next((t for t in game.get("ticks", []) if t["n"] == tick), None)
+        entry = next((t for t in game.get("turns", []) if t["n"] == turn), None)
         for key, items in (results or {}).items():
             if isinstance(items, dict):
                 items = [items]
@@ -331,18 +331,18 @@ class Applier:
                 it = copy.deepcopy(it)
                 kind = it.get("kind", "own")
                 if key in characters_by_id:
-                    self.add_inbox(game, characters_by_id[key], kind, it, tick)
-                    if store_in_tick and entry is not None:
+                    self.add_inbox(game, characters_by_id[key], kind, it, turn)
+                    if store_in_turn and entry is not None:
                         entry.setdefault("results", {}).setdefault(key, []).append(it)
                 elif key in players:
-                    self.add_setup_inbox(game, key, it, tick)
+                    self.add_setup_inbox(game, key, it, turn)
                 else:
                     raise ApplyError(f"result addressed to unknown recipient {key}")
 
-    def apply_shared_digest(self, game, digest, characters, tick):
+    def apply_shared_digest(self, game, digest, characters, turn):
         if not digest:
             return
-        entry = next((t for t in game.get("ticks", []) if t["n"] == tick), None)
+        entry = next((t for t in game.get("turns", []) if t["n"] == turn), None)
         if entry is not None:
             entry.setdefault("shared_digest", []).extend(digest)
         for c in characters:
@@ -350,7 +350,7 @@ class Applier:
                 self.add_inbox(game, c, "system", {
                     "kind": "system", "language": c.get("language"),
                     "facts": [{"block": None, "kind": "world", "text": d.get("text", "")} for d in digest],
-                    "prompts": [], "narration_hints": {"mood": "", "pace": "", "senses": [], "do_not": []}}, tick)
+                    "prompts": [], "narration_hints": {"mood": "", "pace": "", "senses": [], "do_not": []}}, turn)
 
     def check_lethality(self, game, characters, decisions):
         lethality = (game.get("settings") or {}).get("lethality", "high")

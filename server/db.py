@@ -39,7 +39,7 @@ class MemoryStore:
         res = []
         for id_, row in self.t["game"].items():
             ix = row["index"]
-            if ix.get("phase") == "active" and ix.get("tick_closes") and ix["tick_closes"] <= now_iso:
+            if ix.get("phase") == "active" and ix.get("turn_closes") and ix["turn_closes"] <= now_iso:
                 res.append(id_)
         return res
 
@@ -79,20 +79,20 @@ class SupabaseStore:
         return [(r["data"], r["version"]) for r in q.execute().data]
 
     def due_games(self, now_iso):
-        r = (self._tbl("game").select("id").eq("phase", "active").lte("tick_closes", now_iso).execute().data)
+        r = (self._tbl("game").select("id").eq("phase", "active").lte("turn_closes", now_iso).execute().data)
         return [x["id"] for x in r]
 
 
 def index_for(kind, doc):
     """Index columns for a record, so that the store can query without opening the JSON."""
     if kind == "game":
-        return {"phase": doc.get("phase"), "tick_closes": (doc.get("clock") or {}).get("tick_closes")}
+        return {"phase": doc.get("phase"), "turn_closes": (doc.get("clock") or {}).get("turn_closes")}
     if kind == "character":
         return {"game_id": doc["game_id"], "player_id": doc["player_id"], "is_alive": bool(doc.get("is_alive", True))}
     if kind in ("npc_state", "location_state"):
         return {"game_id": doc["game_id"]}
     if kind == "submit_action":
-        return {"game_id": doc["game_id"], "tick": doc["tick"]}
+        return {"game_id": doc["game_id"], "turn": doc["turn"]}
     if kind in ("npc", "location"):
         sc = doc.get("scope") or {}
         return {"adventure_id": sc.get("adventure_id"), "game_id": sc.get("game_id")}

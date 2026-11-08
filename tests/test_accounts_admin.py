@@ -51,12 +51,12 @@ def test_setup_guide_has_every_requested_topic(world):
     eng, _ = world
     g = eng.setup_guide()
     keys = {t["key"] for t in g["topics"]}
-    assert keys == {"start", "choose", "character", "commands", "ticks", "autonomous", "death", "mechanics"}
+    assert keys == {"start", "choose", "character", "commands", "turns", "autonomous", "death", "mechanics"}
     for k in keys:
         one = eng.setup_guide(k)
         assert one["guide"].strip() and one["title"]
     assert "player key" in eng.setup_guide("start")["guide"].lower()
-    assert "24 hours" in eng.setup_guide("ticks")["guide"]
+    assert "24 hours" in eng.setup_guide("turns")["guide"]
     assert "Moderate" in eng.setup_guide("death")["guide"]
     with pytest.raises(EngineError):
         eng.setup_guide("nope")

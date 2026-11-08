@@ -7,8 +7,8 @@ era: "1930"
 place: Somewhere quiet
 players: { min: 1, max: 5 }
 recommended:
-  tick_span: day
-  tick_interval_hours: 24
+  turn_span: day
+  turn_interval_hours: 24
   early_close_solo: true
   early_close_party: false
 pregenerated: [pregen_test_pc, pregen_test_b, pregen_test_c, pregen_test_d]

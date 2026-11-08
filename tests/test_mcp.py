@@ -21,12 +21,12 @@ class Dummy:
         return f
 
 
-def test_tools_exposed_and_resolve_tick_is_not_a_player_tool():
+def test_tools_exposed_and_resolve_turn_is_not_a_player_tool():
     mcp = build_mcp(Dummy())
     tools = asyncio.run(mcp.list_tools())
     names = {t.name for t in tools}
     assert names == EXPECTED
-    assert "resolve_tick" not in names
+    assert "resolve_turn" not in names
     sa = next(t for t in tools if t.name == "submit_action")
     assert {"player_key", "game_id", "kind"} <= set(sa.inputSchema["required"])
     assert "player_id" not in sa.inputSchema["properties"]

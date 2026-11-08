@@ -34,10 +34,10 @@ SCHEMAS = {
     "generate_adventure": {
         "title": "string", "generation": "full | emergent | supplied", "era": "string", "place": "string",
         "players": {"min": "int", "max": "int"},
-        "recommended": {"tick_span": "day | block", "tick_interval_hours": "int", "lethality": "low | moderate | high"},
+        "recommended": {"turn_span": "day | block", "turn_interval_hours": "int", "lethality": "low | moderate | high"},
         "language": "string", "summary": "string (one player-safe sentence)",
         "content": "string (markdown with # PART A, # PART B, # PART C)",
-        "seed": "object (emergent only: truth, hook, stake, antagonist, clock_ticks, anchor_npcs[4], first_place, opening_handout)",
+        "seed": "object (emergent only: truth, hook, stake, antagonist, clock_turns, anchor_npcs[4], first_place, opening_handout)",
         "npcs": [{"id": "npc_...", "name": "string", "role": "string", "trait": "string", "goal": "string", "secret": "string",
                   "base_stats": "object", "base_inventory": "array", "schedule": "string",
                   "main": "bool (true for the antagonist, the anchor NPCs and anyone the plot cannot lose: a late joiner can never take them over)"}],
@@ -45,7 +45,7 @@ SCHEMAS = {
         "pregenerated_ids": ["string"], "dice_used": {"d6": "int", "d10": "int", "d20": "int"}, "notes": "string"},
     "create_game": {
         "title": "string", "language": "string", "display_name": "string",
-        "lethality": "low | moderate | high", "tick_interval_hours": "int", "tick_span": "day | block",
+        "lethality": "low | moderate | high", "turn_interval_hours": "int", "turn_span": "day | block",
         "pvp": "none | soft | full", "visibility": "private | open", "illustrations": "off | on",
         "image_style": "string, 40 to 700 characters, English: the fixed look of every picture in this game (required when illustrations is on)", "notes": "string"},
 }
@@ -114,8 +114,8 @@ def game_context(adventure, defaults, images_available=False):
                           "recommended": adventure.get("recommended"),
                           "language": adventure.get("language")},
             "ruleset_id": adventure.get("ruleset_id"), "defaults": defaults,
-            "options": {"lethality": ["low", "moderate", "high"], "tick_span": ["day", "block"],
-                        "tick_close_hour": "0 to 23 = the hour of the day (in tick_timezone) at which a tick of a whole number of days closes; -1 = exactly one interval after it opens", "pvp": ["none", "soft", "full"], "visibility": ["private", "open"],
+            "options": {"lethality": ["low", "moderate", "high"], "turn_span": ["day", "block"],
+                        "turn_close_hour": "0 to 23 = the hour of the day (in turn_timezone) at which a turn of a whole number of days closes; -1 = exactly one interval after it opens", "pvp": ["none", "soft", "full"], "visibility": ["private", "open"],
                         "illustrations": ["off", "on"] if images_available else ["off"]},
             "explanations": {"lethality": lethality_help()}}
 
@@ -173,7 +173,7 @@ def validate_character(p):
 
 _REQ_B = [("the truth", r"\bthe truth\b|\btruth\b"), ("cast", r"\bcast\b"), ("places", r"\bplaces?\b"), ("timeline", r"\btimeline\b|\bclock\b"),
           ("clues", r"\bclues?\b"), ("finale", r"\bfinale\b"), ("endings", r"\bendings?\b")]
-_SEED_KEYS = ("truth", "hook", "stake", "antagonist", "clock_ticks", "anchor_npcs", "first_place", "opening_handout")
+_SEED_KEYS = ("truth", "hook", "stake", "antagonist", "clock_turns", "anchor_npcs", "first_place", "opening_handout")
 
 
 def validate_adventure(p, ruleset_ids):
@@ -189,11 +189,11 @@ def validate_adventure(p, ruleset_ids):
     if not (isinstance(pl, dict) and isinstance(pl.get("min"), int) and isinstance(pl.get("max"), int) and 1 <= pl["min"] <= pl["max"] <= 8):
         problems.append("players must be {min, max} integers, 1 to 8, min not above max")
     rec = p.get("recommended") or {}
-    if rec.get("tick_span", "day") not in ("day", "block"):
-        problems.append("recommended.tick_span must be day or block")
-    h = rec.get("tick_interval_hours", 24)
+    if rec.get("turn_span", "day") not in ("day", "block"):
+        problems.append("recommended.turn_span must be day or block")
+    h = rec.get("turn_interval_hours", 24)
     if not isinstance(h, int) or not (1 <= h <= 168):
-        problems.append("recommended.tick_interval_hours must be 1 to 168")
+        problems.append("recommended.turn_interval_hours must be 1 to 168")
     if rec.get("lethality", "high") not in ("low", "moderate", "high"):
         problems.append("recommended.lethality must be low, moderate or high")
     c = p.get("content")
@@ -236,21 +236,21 @@ def validate_game(p, adventure, images_available=False):
         return ["the package must be an object"]
     if p.get("lethality", "high") not in ("low", "moderate", "high"):
         problems.append("lethality must be low, moderate or high")
-    if p.get("tick_span", "day") not in ("day", "block"):
-        problems.append("tick_span must be day or block")
-    h = p.get("tick_interval_hours", 24)
+    if p.get("turn_span", "day") not in ("day", "block"):
+        problems.append("turn_span must be day or block")
+    h = p.get("turn_interval_hours", 24)
     if not isinstance(h, int) or not (1 <= h <= 168):
-        problems.append("tick_interval_hours must be 1 to 168")
-    ch = p.get("tick_close_hour")
+        problems.append("turn_interval_hours must be 1 to 168")
+    ch = p.get("turn_close_hour")
     if ch is not None and (isinstance(ch, bool) or not isinstance(ch, int) or not (-1 <= ch <= 23)):
-        problems.append("tick_close_hour must be -1 (no fixed hour) or an hour from 0 to 23")
-    tzn = p.get("tick_timezone")
+        problems.append("turn_close_hour must be -1 (no fixed hour) or an hour from 0 to 23")
+    tzn = p.get("turn_timezone")
     if tzn:
         try:
             from zoneinfo import ZoneInfo
             ZoneInfo(str(tzn).strip())
         except Exception:
-            problems.append("tick_timezone must be an IANA timezone name such as Europe/Madrid")
+            problems.append("turn_timezone must be an IANA timezone name such as Europe/Madrid")
     if p.get("pvp", "soft") not in ("none", "soft", "full"):
         problems.append("pvp must be none, soft or full")
     ill = p.get("illustrations") or ("on" if images_available else "off")  # on by default when the server can draw

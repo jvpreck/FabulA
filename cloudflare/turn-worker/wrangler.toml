@@ -1,4 +1,4 @@
-name = "ai-master-tick"
+name = "ai-master-turn"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 

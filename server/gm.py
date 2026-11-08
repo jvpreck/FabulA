@@ -75,12 +75,12 @@ class Usage:
             doc = self.store.get("usage", f"{tier}:{self._day(self.now_fn(), tier)}")[0] or {}
             out[tier] = {"used_today": doc.get("count", 0), "daily_limit": config.GEMINI_LIMITS[tier]["rpd"],
                          "per_minute_limit": config.GEMINI_LIMITS[tier]["rpm"],
-                         "model": {"tick": config.GEMINI_MODEL_TICK, "light": config.GEMINI_MODEL_LIGHT, "image": config.IMAGE_MODEL}[tier]}
+                         "model": {"turn": config.GEMINI_MODEL_TURN, "light": config.GEMINI_MODEL_LIGHT, "image": config.IMAGE_MODEL}[tier]}
         return out
 
 
 class GeminiGM:
-    """Routes each request to a tier. `tick` (strong) is used for closing a tick and checking a character; everything else is `light`.
+    """Routes each request to a tier. `turn` (strong) is used for closing a turn and checking a character; everything else is `light`.
     If the strong model's daily quota is used up, or it fails with a quota or server error, the request goes to the light model and
     `last["degraded"]` says so. If the strong model is only over its per-minute limit, the request is deferred (GMBusy) and the
     scheduler tries again on its next run. If the light model is out of quota, GMBusy tells the player to try later.
@@ -152,14 +152,14 @@ class GeminiGM:
 
     def call(self, system: str, user: str, tier: str = "light") -> str:
         degraded = None
-        if tier == "tick":
-            r = self.usage.reserve("tick") if self.usage else "ok"
+        if tier == "turn":
+            r = self.usage.reserve("turn") if self.usage else "ok"
             if r == "minute":
-                raise GMBusy("the strong AI Master model is at its per-minute limit; the tick will be retried shortly")
+                raise GMBusy("the strong AI Master model is at its per-minute limit; the turn will be retried shortly")
             if r == "ok":
                 try:
-                    out = self._generate_retrying(config.GEMINI_MODEL_TICK, config.GEMINI_THINKING_LEVEL_TICK, system, user)
-                    self.last = {"tier": "tick", "model": config.GEMINI_MODEL_TICK, "degraded": None}
+                    out = self._generate_retrying(config.GEMINI_MODEL_TURN, config.GEMINI_THINKING_LEVEL_TURN, system, user)
+                    self.last = {"tier": "turn", "model": config.GEMINI_MODEL_TURN, "degraded": None}
                     return out
                 except Exception as e:
                     if not self._retryable(e):

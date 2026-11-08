@@ -22,7 +22,7 @@ If Claude does not see the tools, check that the connector is on in the chat and
 2. **Pick a game.** Either create a new one from an adventure, or join one that already exists (see "How to choose a game").
 3. **Make a character.** You cannot play without one (see "Your character").
 4. **Confirm the character.** Claude shows you the finished sheet. When you approve it, you are in the story.
-5. **Play.** Tell Claude what your character does. Small things happen at once. Bigger things wait for the next tick, when the Master resolves everyone's actions together.
+5. **Play.** Tell Claude what your character does. Small things happen at once. Bigger things wait for the next turn, when the Master resolves everyone's actions together.
 
 At any time you can say "what can I do?" and Claude will remind you of your options.
 
@@ -31,7 +31,7 @@ At any time you can say "what can I do?" and Claude will remind you of your opti
 ## [choose] How to choose a game
 
 - **See what can be played.** Ask for the adventure list. Each adventure has a title, era, ruleset, how many players it supports and a short premise. Secrets are never listed.
-- **Start your own game.** Pick an adventure (or ask Claude to write a new one from your idea), then Claude asks you for the settings: language, how deadly it is (lethality), how often the world advances (the tick), the stance on players fighting each other (PvP), and who can join (**private**: only people who get the game id, or **open**: it is listed for other registered players while it has free seats), and whether the game draws **pictures** of key scenes (see "Other things worth knowing"). You get a **game id**. Share it with friends so they can join. Playing alone is fully supported.
+- **Start your own game.** Pick an adventure (or ask Claude to write a new one from your idea), then Claude asks you for the settings: language, how deadly it is (lethality), how often the world advances (the turn), the stance on players fighting each other (PvP), and who can join (**private**: only people who get the game id, or **open**: it is listed for other registered players while it has free seats), and whether the game draws **pictures** of key scenes (see "Other things worth knowing"). You get a **game id**. Share it with friends so they can join. Playing alone is fully supported.
 - **Join a game.** Ask for the list of games. It shows your games and the open ones that have free seats. You can also join any game if someone gives you its game id.
 - **Several games.** You can be in more than one game, with one character in each. Tell Claude which one you mean if it is not obvious.
 
@@ -67,23 +67,23 @@ You write in plain language. Claude turns it into the right request. Useful thin
 
 Claude can answer some things without asking the server: your stats, inventory and what you know, a reminder of the story, a rules question, and more detail about a scene already told. It asks the server for anything new.
 
-## [ticks] Time, ticks and playing together
+## [turns] Time, turns and playing together
 
-- The game runs in **ticks**. A tick is a period of real time, by default **24 hours** (the host or the adventure may choose another). Each tick covers a slice of game time, usually a day, split into Blocks (Morning, Afternoon, Evening, Night).
-- During a tick, everyone sends actions whenever they like. When the tick closes, the Master resolves **all** the players' actions together, settles any conflicts between them, and sends each player their own results. Then the next tick opens.
-- **You never have to wait idly.** Many things resolve at once (see the next section). Only what truly involves other people, or something big, waits for the tick.
+- The game runs in **turns**. A turn is a period of real time, by default **24 hours** (the host or the adventure may choose another). Each turn covers a slice of game time, usually a day, split into Blocks (Morning, Afternoon, Evening, Night).
+- During a turn, everyone sends actions whenever they like. When the turn closes, the Master resolves **all** the players' actions together, settles any conflicts between them, and sends each player their own results. Then the next turn opens.
+- **You never have to wait idly.** Many things resolve at once (see the next section). Only what truly involves other people, or something big, waits for the turn.
 - **Playing together.** Players are separate people at separate times. Your character knows only what they have seen or been told in the story. Other players' characters can be in the same place: you will see what they do in front of you, you can talk to them directly, and what you do may be seen by them. Secrets between characters stay secret unless the story shares them.
-- **Playing alone.** When you are the only player, the tick closes as soon as you have used the time you intend to use, so the game moves at your own pace.
-- **If you are away.** If you do not send anything in a tick, your character follows your standing orders, or holds back and stays safe. After a few missed ticks you are marked away and the character keeps following your standing orders. You can come back at any time and carry on.
+- **Playing alone.** When you are the only player, the turn closes as soon as you have used the time you intend to use, so the game moves at your own pace.
+- **If you are away.** If you do not send anything in a turn, your character follows your standing orders, or holds back and stays safe. After a few missed turns you are marked away and the character keeps following your standing orders. You can come back at any time and carry on.
 - **Late joiners.** A new player can join a running game. They can create a character, pick a pregenerated one that is still free, or **take over an NPC** the party has met (never a main character of the adventure). Pregenerated characters nobody chose stay in the story as NPC companions and can be claimed later this way. The Master finds a natural way to bring them into the story.
 
 ## [autonomous] What you can do without waiting
 
-The Master resolves a minor action **at once** when it affects only your character, nobody else in the same place is involved, it does not change what another character is waiting on, it triggers nothing irreversible, and your character still has time (a Block) left in this tick. Typical examples: searching a room, studying a document, walking inside the same place, talking to an NPC, resting, preparing, crafting.
+The Master resolves a minor action **at once** when it affects only your character, nobody else in the same place is involved, it does not change what another character is waiting on, it triggers nothing irreversible, and your character still has time (a Block) left in this turn. Typical examples: searching a room, studying a document, walking inside the same place, talking to an NPC, resting, preparing, crafting.
 
-- Each such action uses up part of your character's time in the tick. You can do several, one after another, until the Blocks of the tick are used. After that, further actions wait for the next tick.
-- If an action grows into something that touches others (it makes noise, wakes someone, draws the enemy), the Master stops it there, tells you, and the rest waits for the tick.
-- An immediate result is final. It cannot be reopened at the tick.
+- Each such action uses up part of your character's time in the turn. You can do several, one after another, until the Blocks of the turn are used. After that, further actions wait for the next turn.
+- If an action grows into something that touches others (it makes noise, wakes someone, draws the enemy), the Master stops it there, tells you, and the rest waits for the turn.
+- An immediate result is final. It cannot be reopened at the turn.
 - **Speech between characters in the same place is instant** and costs no time. A conversation is possible one line at a time if the other player is online.
 - Claude can also answer things locally (your stats, inventory, plans, a reminder of the story, a rules question) with no waiting at all.
 
@@ -99,7 +99,7 @@ How deadly the game is is chosen when it is created, and you can always see it:
 
 In every level the danger is shown to you in the story before it can kill, and a death is never silently reversed.
 
-When a character dies you stay **in the same game**. The server offers a replacement: a newly generated character, a pregenerated one that is still free, an NPC the Master has marked as available, or leaving the game. A new character is a new person: it does not inherit the dead character's knowledge, items or relationships. (A character taken from an NPC starts with what the NPC knew and had.) The new character arrives in the story within a tick or two. The dead character's belongings stay in the world.
+When a character dies you stay **in the same game**. The server offers a replacement: a newly generated character, a pregenerated one that is still free, an NPC the Master has marked as available, or leaving the game. A new character is a new person: it does not inherit the dead character's knowledge, items or relationships. (A character taken from an NPC starts with what the NPC knew and had.) The new character arrives in the story within a turn or two. The dead character's belongings stay in the world.
 
 ## [mechanics] Other things worth knowing
 

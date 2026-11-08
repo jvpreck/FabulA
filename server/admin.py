@@ -14,7 +14,7 @@ COMMANDS = {
     "get_game": "game_id",
     "list_players": "no arguments",
     "list_adventures": "no arguments (generated adventures stored in the database)",
-    "delete_game": "game_id: removes the game, its characters, NPC and location states, per-tick actions and tasks",
+    "delete_game": "game_id: removes the game, its characters, NPC and location states, per-turn actions and tasks",
     "close_game": "game_id: ends the game and keeps its data",
     "delete_adventure": "adventure_id [force]: removes a generated adventure; refused while games use it unless force is true",
     "delete_player": "player_id [force]: removes the player and their characters, and takes them out of games",
@@ -93,8 +93,8 @@ def _cmd_list_games(engine, args):
     out = []
     for g, _ in engine.store.find("game"):
         out.append({"game_id": g["id"], "title": g.get("title"), "phase": g.get("phase"), "adventure_id": g.get("adventure_id"),
-                    "players": len(g.get("roster", [])), "tick": (g.get("clock") or {}).get("tick"),
-                    "tick_closes": (g.get("clock") or {}).get("tick_closes"), "visibility": (g.get("settings") or {}).get("visibility")})
+                    "players": len(g.get("roster", [])), "turn": (g.get("clock") or {}).get("turn"),
+                    "turn_closes": (g.get("clock") or {}).get("turn_closes"), "visibility": (g.get("settings") or {}).get("visibility")})
     return {"games": out}
 
 

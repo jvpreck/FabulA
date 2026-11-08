@@ -35,7 +35,7 @@ title: Player client guide, how to use FabulA
 ## The play loop
 
 1. Start every session with `get_results` (all games, or one `game_id`). Narrate what is new.
-2. Ask the player what the character does. Send it with `submit_action` (`kind: "action"`, free text). Small things that only involve the character resolve at once and come back in the reply. Bigger things wait for the tick, and the results arrive with a later `get_results`.
+2. Ask the player what the character does. Send it with `submit_action` (`kind: "action"`, free text). Small things that only involve the character resolve at once and come back in the reply. Bigger things wait for the turn, and the results arrive with a later `get_results`.
 3. Speech to another character in the same place: `kind: "say"`. Messages to other players: `kind: "message"`. Standing orders for when the player is away: `kind: "standing_orders"`.
 4. Keep the three artifacts described in the `narrator` guide up to date.
 
@@ -47,7 +47,7 @@ title: Player client guide, how to use FabulA
 - Showing GM-only text from a package to the player.
 - Submitting a package with extra fields, or a different shape from `submission.schema`. Extra fields are dropped.
 - Skipping `character_confirm`. A character cannot play until the player confirms it.
-- Forgetting that time runs in ticks: not every action gets an answer at once.
+- Forgetting that time runs in turns: not every action gets an answer at once.
 
 ## Languages
 

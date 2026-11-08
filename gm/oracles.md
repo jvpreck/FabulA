@@ -22,7 +22,7 @@
 - Anything the adventure file or the players have already defined.
 - A way to contradict the truth.
 
-Oracle results inspire, they do not restrict. Fail forward: even a "No" brings a cost or a way around. The AI Master rolls and interprets, using the dice stream, and logs every roll. Record what an oracle establishes as a world fact (state contract §3.4) so later ticks stay consistent.
+Oracle results inspire, they do not restrict. Fail forward: even a "No" brings a cost or a way around. The AI Master rolls and interprets, using the dice stream, and logs every roll. Record what an oracle establishes as a world fact (state contract §3.4) so later turns stay consistent.
 
 ---
 
@@ -115,7 +115,7 @@ Roll or choose. Combine with the Mundane Cause generator (§8) and the antagonis
 ## 4. Scene Test and Events
 
 ### 4.1 Tension and the Scene Test
-Keep a **Tension** score from 1 to 6, starting at 2, in the game's GM-only state. Once per tick for each thread (a group of characters in one place), at the start of the thread's first Block, roll a d6. If the result is equal to or lower than Tension, the scene is **altered**. Roll a d6:
+Keep a **Tension** score from 1 to 6, starting at 2, in the game's GM-only state. Once per turn for each thread (a group of characters in one place), at the start of the thread's first Block, roll a d6. If the result is equal to or lower than Tension, the scene is **altered**. Roll a d6:
 - **1 to 2, Complication:** roll on the Complication table (§10).
 - **3 to 4, Interruption:** roll an Event Meaning (§4.2) and add it to the scene.
 - **5 to 6, Escalation:** tick the clock, raise the antagonist's pressure or an NPC's belief state by one.
@@ -906,7 +906,7 @@ Roll or choose, then make the parts coherent.
 4. The antagonist: motivation, method and weakness (§9).
 5. Four anchor NPCs: the antagonist, a helper, a witness and an authority (§6).
 6. The first place (§5) and the opening handout (§7).
-7. The clock in ticks (§15.5).
+7. The clock in turns (§15.5).
 8. If a hazard fits: its zones and cues (§5, §8).
 
 Write each as one or two plain sentences. State the truth first.
@@ -945,7 +945,7 @@ For each essential conclusion create at least three routes (the three-clue rule)
 
 ### 15.5 Clock and checkpoints
 
-Set the deadline as a number of ticks. A five-day adventure is five ticks at a day span and twenty at a Block span. Checkpoints, as a share of the deadline:
+Set the deadline as a number of turns. A five-day adventure is five turns at a day span and twenty at a Block span. Checkpoints, as a share of the deadline:
 
 | Share | What must have happened |
 |---|---|
@@ -953,7 +953,7 @@ Set the deadline as a number of ticks. A five-day adventure is five ticks at a d
 | 50% | A twist or a reversal; the antagonist's pressure is moderate |
 | 75% | The antagonist reacts directly (pressure is high); allies are pressured |
 | 90% | The finale is designed and at least three fair warnings have begun |
-| 100% | The finale resolves in crisis ticks |
+| 100% | The finale resolves in crisis turns |
 
 ### 15.6 Consistency
 

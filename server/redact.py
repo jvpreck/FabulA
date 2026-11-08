@@ -23,8 +23,8 @@ def sync_block(game: dict, character: dict, characters: list) -> dict:
     kn = character.get("knowledge") or {}
     return {
         "version": (character.get("client_sync") or {}).get("version", 0),
-        "time": {"tick": clock.get("tick"), "day": clock.get("day"), "block": clock.get("block"),
-                 "tick_closes": clock.get("tick_closes")},
+        "time": {"turn": clock.get("turn"), "day": clock.get("day"), "block": clock.get("block"),
+                 "turn_closes": clock.get("turn_closes")},
         "character": {
             "id": character["id"], "name": character.get("name"), "is_alive": character.get("is_alive", True),
             "status": character.get("status"), "language": character.get("language"),
@@ -45,7 +45,7 @@ def sync_block(game: dict, character: dict, characters: list) -> dict:
             "open_prompts": character.get("open_prompts", []),
         },
         "others_here": others_here(character, characters),
-        "story_summary_tick": (character.get("client_sync") or {}).get("story_summary_tick", 0),
+        "story_summary_turn": (character.get("client_sync") or {}).get("story_summary_turn", 0),
     }
 
 
@@ -60,5 +60,5 @@ def game_summary(game: dict) -> dict:
     s = game.get("settings") or {}
     return {"id": game["id"], "title": game.get("title"), "phase": game.get("phase"), "format": game.get("format"),
             "adventure_id": game.get("adventure_id"), "ruleset_id": game.get("ruleset_id"),
-            "settings": {k: s.get(k) for k in ("tick_interval_hours", "tick_close_hour", "tick_timezone", "tick_span", "early_close", "pvp", "lethality", "illustrations")},
+            "settings": {k: s.get(k) for k in ("turn_interval_hours", "turn_close_hour", "turn_timezone", "turn_span", "early_close", "pvp", "lethality", "illustrations")},
             "clock": game.get("clock"), "roster": game.get("roster", [])}

@@ -21,7 +21,7 @@
 |---|---|
 | `start_here` | The very first call in any new chat: what the engine is and what to call for what (no key needed). |
 | `get_guide` | Guides: `player-client-guide`, `players-guide`, `create-character`, `create-game`, `generate-adventure`, `import-ruleset`, `narrator`, `mcp-guide` (no key needed). |
-| `get_setup_guide` | Same as `get_guide("players-guide")`. A new player, or any question about how the game works (`topic`: start, choose, character, commands, ticks, autonomous, death, mechanics; no key needed). |
+| `get_setup_guide` | Same as `get_guide("players-guide")`. A new player, or any question about how the game works (`topic`: start, choose, character, commands, turns, autonomous, death, mechanics; no key needed). |
 | `register_player` | The player has no key yet. Returns the secret `player_key` once. |
 | `list_games` | The player wants to see their games and the open games they can join. |
 | `list_adventures` | The player wants to see what can be played. |
@@ -78,18 +78,18 @@ Anything that changes the game or reveals new information: an action, a search, 
 The server answers with a `handling`:
 
 - `answered`: show the facts.
-- `autonomous`: the action was resolved at once. Narrate the facts, then offer the next step. The player can keep acting until the character's Blocks for the tick run out.
-- `queued`: the action waits for the tick. Say so, say when the tick closes, and offer something to do meanwhile (a free query, a note, a message, a rest).
+- `autonomous`: the action was resolved at once. Narrate the facts, then offer the next step. The player can keep acting until the character's Blocks for the turn run out.
+- `queued`: the action waits for the turn. Say so, say when the turn closes, and offer something to do meanwhile (a free query, a note, a message, a rest).
 - `clarify`: ask the player the question the facts contain.
 - `rejected`: say why, in the fiction.
 
-Players can act several times between ticks. Keep the play brisk: the aim is to play as much as possible without waiting.
+Players can act several times between turns. Keep the play brisk: the aim is to play as much as possible without waiting.
 
 ## 6. The three artifacts
 
 Create three artifacts in this chat and keep them current. They do not have to be exact copies of the server's data. Make them readable. Their purpose is that nothing is lost if this chat is compacted, especially the narration, which only you write.
 
-**Artifact 1: Character state.** Name, concept, current and maximum stats, conditions, location, inventory, means, relationships (people and other characters), run notes, whether the character is alive, the time (tick, day, Block, when the tick closes).
+**Artifact 1: Character state.** Name, concept, current and maximum stats, conditions, location, inventory, means, relationships (people and other characters), run notes, whether the character is alive, the time (turn, day, Block, when the turn closes).
 
 **Artifact 2: Knowledge and plans.** What the character knows (facts, clues, documents, hearsay marked as such), open tasks, ideas and questions, plans and queued actions, spend offers not yet claimed, standing orders and safety settings, messages waiting, and decisions taken that matter.
 
@@ -98,7 +98,7 @@ Create three artifacts in this chat and keep them current. They do not have to b
 **Update rules**
 - After every result you narrate, update the artifacts. Use the `sync` block that comes with each result (`version`, character state, knowledge, recent events, decisions, pending items, other characters present).
 - If the sync `version` is higher than the one in your artifact 1, rebuild artifacts 1 and 2 from the sync block, or call `get_character`.
-- After you update artifact 3, call `save_story_summary` with its text and the current tick, so the server keeps a copy.
+- After you update artifact 3, call `save_story_summary` with its text and the current turn, so the server keeps a copy.
 - At the start of a session, or when you notice the chat has been compacted: call `get_character` and `get_results`, rebuild artifacts 1 and 2 from the server, and read artifact 3 (or fetch the saved summary from `get_character`).
 - Never put hidden information in the artifacts. You do not have any.
 
@@ -140,8 +140,8 @@ When the player wants their character to say something to another character in t
 
 Some games draw a picture of an important scene. The server decides when and who may see it. You never make pictures yourself.
 
-- **The "Illustrations available" section.** After the narration, the notebook entry and the status, and before the next possible actions, always add a section headed **Illustrations available** whenever the result has `illustrations`, `illustrations_older` above 0 or `pending_illustrations` above 0. The player must not have to ask for pictures. List each new picture on its own line as a link `[link_text](url)` (`illustrations` entries carry a ready `link_text` and `url`; if `url` is missing, call `get_image`), say whether it is a portrait or a scene, and add a short line for the earlier pictures (`illustrations_older`: the player can ask to see them, and you call `list_images`) and one for pictures still being drawn (`pending_illustrations`). Leave the section out only when all three are empty. Do not promise a picture that is not listed: most ticks have none.
-- **When one exists.** `get_results` and the results of `submit_action` can return `illustrations`: each has `image_id`, `character_id`, `tick`, `caption`, `link_text` and a `url` that expires after `expires_in_seconds`.
+- **The "Illustrations available" section.** After the narration, the notebook entry and the status, and before the next possible actions, always add a section headed **Illustrations available** whenever the result has `illustrations`, `illustrations_older` above 0 or `pending_illustrations` above 0. The player must not have to ask for pictures. List each new picture on its own line as a link `[link_text](url)` (`illustrations` entries carry a ready `link_text` and `url`; if `url` is missing, call `get_image`), say whether it is a portrait or a scene, and add a short line for the earlier pictures (`illustrations_older`: the player can ask to see them, and you call `list_images`) and one for pictures still being drawn (`pending_illustrations`). Leave the section out only when all three are empty. Do not promise a picture that is not listed: most turns have none.
+- **When one exists.** `get_results` and the results of `submit_action` can return `illustrations`: each has `image_id`, `character_id`, `turn`, `caption`, `link_text` and a `url` that expires after `expires_in_seconds`.
 - **Showing it. Pictures are always links.** Call `get_image` with the `game_id` and `image_id` (without `inline`). It returns a `url`, which you give to the player as a markdown link, `[Illustration: caption](url)`. **The link text is always a caption of what the picture shows, prefixed with "Illustration: "** (the `link_text` field has it ready; never use "click here" or a bare URL). Do not use `inline=true` unless the player explicitly asks to see the picture itself in the chat. Never describe a picture you cannot see. The link **expires** after a few minutes (`expires_in_seconds`). If the player says it does not open any more, call `get_image` again for a new one.
 - **Old pictures.** To see them again, or to list them, call `list_images` and then `get_image`. A picture that is `pending` is not drawn yet. Tell the player it will be ready within a few minutes: call get_results or list_images again.
 - **Portraits.** Some pictures are portraits of a character or NPC (`kind` is `portrait`, the caption is the name). Your own character's portrait is made once the character is confirmed. NPC portraits appear when your character meets them. Offer them the same way. Portraits are the people's fixed look, so use them when the player asks what someone looks like, and never describe a face that the caption does not give.

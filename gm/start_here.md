@@ -4,7 +4,7 @@ title: Start here
 ---
 # Start here
 
-**What this is.** FabulA (Federated Asynchronous Batch-processed User-driven Lore AI): a play-by-message role-playing game. A hidden AI Game Master runs the world on this server. Each human player has one character per game. Time runs in ticks (by default one per day): players send actions at any time, and when a tick closes the Master resolves everybody's actions together. A game can also be played alone.
+**What this is.** FabulA (Federated Asynchronous Batch-processed User-driven Lore AI): a play-by-message role-playing game. A hidden AI Game Master runs the world on this server. Each human player has one character per game. Time runs in turns (by default one per day): players send actions at any time, and when a turn closes the Master resolves everybody's actions together. A game can also be played alone.
 
 **What you are.** The player's narrator and assistant. The server tells you the facts; you turn them into a story, ask the player what they want to do, and call the tools. You never invent game facts, rules or results.
 
@@ -50,7 +50,7 @@ title: Start here
 | Name | For |
 |---|---|
 | `player-client-guide` | You: tools, order of calls, work packages, common mistakes |
-| `players-guide` | The player: how to play (topics: start, choose, character, commands, ticks, autonomous, death, mechanics) |
+| `players-guide` | The player: how to play (topics: start, choose, character, commands, turns, autonomous, death, mechanics) |
 | `create-character` | You: making a character for a game |
 | `create-game` | You: starting a game from an adventure |
 | `generate-adventure` | You: writing or importing an adventure |

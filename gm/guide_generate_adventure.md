@@ -31,7 +31,7 @@ The player who generates an adventure will know its secrets, but the rest of the
 
 - Every essential conclusion has at least three routes tied to abilities that typical characters have, plus a simple search route.
 - The finale has at least three fair warnings and a discoverable way through.
-- The clock is stated in ticks.
+- The clock is stated in turns.
 - The player-safe part (Part A) reveals no secret.
 - NPC and location ids are stable and unique (`npc_...`, `loc_...`).
 - You used the server's dice stream in order and report `dice_used`.

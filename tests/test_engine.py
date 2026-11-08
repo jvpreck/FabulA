@@ -47,11 +47,11 @@ def standard_gm(env, n):
     req = env.get("request") or {}
     mode = env["mode"]
     g = env["game"]
-    if mode == "resolve_tick":
-        t = g["clock"]["tick"]
+    if mode == "resolve_turn":
+        t = g["clock"]["turn"]
         for c in env["characters"]:
-            r["results"][c["id"]] = [item(f"Tick {t} resolved for {c['name']}")]
-        r["state_changes"].append({"op": "merge", "entity": "game", "id": g["id"], "patch": {"clock": {"tick": t + 1, "day": t + 1, "block": "Morning"}}})
+            r["results"][c["id"]] = [item(f"Turn {t} resolved for {c['name']}")]
+        r["state_changes"].append({"op": "merge", "entity": "game", "id": g["id"], "patch": {"clock": {"turn": t + 1, "day": t + 1, "block": "Morning"}}})
         return r
     kind = req.get("kind")
     pid = req.get("player_id")
@@ -76,7 +76,7 @@ def standard_gm(env, n):
     elif kind == "character_confirm":
         r["state_changes"] += [
             {"op": "merge", "entity": "character", "id": cid, "patch": {"status": "active"}},
-            {"op": "merge", "entity": "game", "id": g["id"], "patch": {"clock": {"tick": 1, "day": 1, "block": "Morning"}}}]
+            {"op": "merge", "entity": "game", "id": g["id"], "patch": {"clock": {"turn": 1, "day": 1, "block": "Morning"}}}]
         others = [c for c in env["characters"] if c.get("status") in ("validated", "active") and c["id"] != cid]
         if not others or all(c["status"] == "active" for c in others):
             r["state_changes"].append({"op": "merge", "entity": "game", "id": g["id"], "patch": {"phase": "active"}})
@@ -86,9 +86,9 @@ def standard_gm(env, n):
         if txt.startswith("search"):
             r["handling"] = "autonomous"
             r["action"] = {"parsed": {"blocks": [{"block": "Morning", "intent": txt}]}}
-            r["state_changes"].append({"op": "append", "entity": "character", "id": cid, "path": "tick_state.blocks_used", "doc": "Morning"})
+            r["state_changes"].append({"op": "append", "entity": "character", "id": cid, "path": "turn_state.blocks_used", "doc": "Morning"})
             r["results"][cid] = [item("You search the room.")]
-            r["events"].append({"id": "ev_1", "tick": g["clock"]["tick"], "day": 1, "block": "Morning", "location_id": "loc_tolland_house",
+            r["events"].append({"id": "ev_1", "turn": g["clock"]["turn"], "day": 1, "block": "Morning", "location_id": "loc_tolland_house",
                                 "summary": "GM view", "participants": [cid], "witnesses": [c["id"] for c in env["characters"] if c["id"] != cid],
                                 "character_summaries": {c["id"]: ("You search." if c["id"] == cid else "You see someone search the drawer.") for c in env["characters"]},
                                 "visibility": "gm", "tags": []})
@@ -98,11 +98,11 @@ def standard_gm(env, n):
         else:
             r["handling"] = "queued"
             r["action"] = {"parsed": {"blocks": [{"block": "Afternoon", "intent": txt}]}}
-            r["results"][cid] = [item("Noted. The world answers at the tick.")]
+            r["results"][cid] = [item("Noted. The world answers at the turn.")]
     elif kind == "decision":
-        r["state_changes"].append({"op": "merge", "entity": "character", "id": cid, "patch": {"is_alive": False, "death": {"tick": 1, "cause": "fall", "summary": "You fell."}}})
+        r["state_changes"].append({"op": "merge", "entity": "character", "id": cid, "patch": {"is_alive": False, "death": {"turn": 1, "cause": "fall", "summary": "You fell."}}})
         if req["payload"].get("choice") == "chosen":
-            r["decisions"].append({"id": "d9", "character_id": cid, "tick": 1, "summary": "Jumped", "gm_impact": "x", "tags": ["chosen_death"]})
+            r["decisions"].append({"id": "d9", "character_id": cid, "turn": 1, "summary": "Jumped", "gm_impact": "x", "tags": ["chosen_death"]})
         r["results"][cid] = [item("You die.")]
     else:
         r["handling"] = "answered"
@@ -112,7 +112,7 @@ def standard_gm(env, n):
 
 def game_pkg(**kw):
     d = {"title": "Run", "language": "en", "display_name": "Jorge", "lethality": "moderate",
-         "tick_interval_hours": 24, "tick_span": "day", "pvp": "soft"}
+         "turn_interval_hours": 24, "turn_span": "day", "pvp": "soft"}
     d.update(kw)
     if d.get("illustrations") == "on" and not d.get("image_style"):
         d["image_style"] = "Gothic ink-and-watercolour illustration, Massachusetts 1925, damp fog, sodium-yellow lamplight, muted greens and browns."
@@ -124,7 +124,7 @@ def new_game(eng, player, adv=ADV, language=None, settings=None):
     out = eng.create_game(player, adv, language=language, settings=settings)
     pkg = out["package"]
     s = settings or {}
-    return eng.submit_package(player, pkg["task_id"], game_pkg(**{k: v for k, v in s.items() if k in ("lethality", "pvp", "tick_span", "tick_interval_hours", "tick_close_hour", "tick_timezone", "visibility", "illustrations", "image_style")}))
+    return eng.submit_package(player, pkg["task_id"], game_pkg(**{k: v for k, v in s.items() if k in ("lethality", "pvp", "turn_span", "turn_interval_hours", "turn_close_hour", "turn_timezone", "visibility", "illustrations", "image_style")}))
 
 
 def char_pkg(name="Iris Calder", concept="a reporter", **kw):
@@ -190,7 +190,7 @@ def test_setup_and_start_solo(world):
     gid, cid = start_solo(eng, "p_ana")
     game, _ = store.get("game", gid)
     assert game["phase"] == "active" and game["format"] == "solo" and game["party_size_at_start"] == 1
-    assert game["clock"]["tick"] == 1 and game["ticks"][0]["status"] == "open"
+    assert game["clock"]["turn"] == 1 and game["turns"][0]["status"] == "open"
     sa, _ = store.get("submit_action", f"{gid}:1")
     assert cid in sa["actions"]
     player, _ = store.get("player", "p_ana")
@@ -199,46 +199,46 @@ def test_setup_and_start_solo(world):
     assert "DOCUMENT 5: THE ADVENTURE" in gm.calls[0][0]
 
 
-def test_autonomous_then_queued_closes_tick_in_solo(world):
+def test_autonomous_then_queued_closes_turn_in_solo(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng)
     r = eng.submit_action("p_jorge", gid, "action", "search the desk", cid)
     assert r["handling"] == "autonomous"
     c, _ = store.get("character", cid)
-    assert c["tick_state"]["blocks_used"] == ["Morning"] and len(c["tick_state"]["autonomous_action_ids"]) == 1
+    assert c["turn_state"]["blocks_used"] == ["Morning"] and len(c["turn_state"]["autonomous_action_ids"]) == 1
     assert c["events"][0]["summary"] == "You search."
     r = eng.submit_action("p_jorge", gid, "action", "visit Larry in the afternoon", cid)
-    assert r["handling"] == "resolved_tick" and r["tick_resolved"]
+    assert r["handling"] == "resolved_turn" and r["turn_resolved"]
     game, _ = store.get("game", gid)
-    assert game["clock"]["tick"] == 2
-    assert [t["status"] for t in game["ticks"]] == ["resolved", "open"]
-    assert game["ticks"][0]["results"][cid]
+    assert game["clock"]["turn"] == 2
+    assert [t["status"] for t in game["turns"]] == ["resolved", "open"]
+    assert game["turns"][0]["results"][cid]
     sa1, _ = store.get("submit_action", f"{gid}:1")
     assert [a["status"] for a in sa1["actions"][cid]] == ["resolved_now", "resolved"]
     sa2, _ = store.get("submit_action", f"{gid}:2")
     assert sa2["actions"][cid] == []
     c, _ = store.get("character", cid)
-    assert c["tick_state"] == {"tick": 2, "blocks_used": [], "queued_action_ids": [], "autonomous_action_ids": []}
+    assert c["turn_state"] == {"turn": 2, "blocks_used": [], "queued_action_ids": [], "autonomous_action_ids": []}
     # nothing is left undelivered and a second resolve is a no-op
     assert eng.get_results("p_jorge", gid)["deliveries"] == []
 
 
-def test_resolve_tick_is_idempotent(world):
+def test_resolve_turn_is_idempotent(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng)
     game, ver = store.get("game", gid)
-    game["ticks"][0]["status"] = "resolved"   # as if another worker already finished tick 1
-    store.put("game", gid, game, ver, {"phase": "active", "tick_closes": game["clock"]["tick_closes"]})
+    game["turns"][0]["status"] = "resolved"   # as if another worker already finished turn 1
+    store.put("game", gid, game, ver, {"phase": "active", "turn_closes": game["clock"]["turn_closes"]})
     calls = len(gm.calls)
-    out = eng.resolve_tick(gid)
+    out = eng.resolve_turn(gid)
     assert out["resolved"] is False and out["reason"] == "already resolved"
     assert len(gm.calls) == calls                 # the GM is not called again
-    # a tick claimed by a live worker is not resolved twice either
+    # a turn claimed by a live worker is not resolved twice either
     game, ver = store.get("game", gid)
-    game["ticks"][0]["status"] = "resolving"
-    game["ticks"][0]["resolving_since"] = clock["t"].isoformat()
-    store.put("game", gid, game, ver, {"phase": "active", "tick_closes": game["clock"]["tick_closes"]})
-    assert eng.resolve_tick(gid)["resolved"] is False and len(gm.calls) == calls
+    game["turns"][0]["status"] = "resolving"
+    game["turns"][0]["resolving_since"] = clock["t"].isoformat()
+    store.put("game", gid, game, ver, {"phase": "active", "turn_closes": game["clock"]["turn_closes"]})
+    assert eng.resolve_turn(gid)["resolved"] is False and len(gm.calls) == calls
 
 
 def test_party_witness_say_and_privacy(world):
@@ -395,7 +395,7 @@ def test_low_lethality_blocks_unchosen_death(world):
     assert c["is_alive"] is False
 
 
-def test_tick_due_and_resolve_due(world):
+def test_turn_due_and_resolve_due(world):
     eng, store, gm, clock = world
     out = new_game(eng, "p_jorge", ADV)
     gid = out["game_id"]
@@ -409,10 +409,10 @@ def test_tick_due_and_resolve_due(world):
     out = eng.resolve_due()
     assert out["checked"] == 1 and out["results"][0]["resolved"] is True
     game, _ = store.get("game", gid)
-    assert game["clock"]["tick"] == 2 and game["clock"]["tick_closes"] > game["ticks"][0]["closes_at"]
+    assert game["clock"]["turn"] == 2 and game["clock"]["turn_closes"] > game["turns"][0]["closes_at"]
     c, _ = store.get("character", a)
-    assert c["participation"]["missed_ticks"] == 1
-    # the first tick is never resolved twice
+    assert c["participation"]["missed_turns"] == 1
+    # the first turn is never resolved twice
     assert eng.resolve_due()["checked"] == 0
 
 
@@ -431,7 +431,7 @@ def adventure_pkg(**kw):
     content = (f"# PART A: PLAYER-SAFE\n{body}\n\n# PART B: GM ONLY\n## The truth\n{secret}\n## Cast\nNPCs.\n## Places\nPlaces.\n"
                f"## Timeline and clock\nDays.\n## Clue matrix\nClues.\n## Finale\nFinale.\n## Endings\nEndings.\n\n# PART C: IDS\n{secret}")
     d = {"title": "The Quiet Mill", "generation": "full", "era": "1930", "place": "New England", "players": {"min": 1, "max": 3},
-         "recommended": {"tick_span": "day", "tick_interval_hours": 24, "lethality": "high"}, "language": "en",
+         "recommended": {"turn_span": "day", "turn_interval_hours": 24, "lethality": "high"}, "language": "en",
          "summary": "A mill.", "content": content,
          "npcs": [{"id": "npc_miller", "name": "Miller", "role": "owner"}], "locations": [{"id": "loc_mill", "name": "The mill"}]}
     d.update(kw)
@@ -476,7 +476,7 @@ def test_emergent_adventure_needs_a_seed(world):
     pkg = eng.generate_adventure("p_jorge", "fear_itself", seed_text="x", generation="emergent")["package"]
     r = eng.submit_package("p_jorge", pkg["task_id"], adventure_pkg(generation="emergent"))
     assert r["accepted"] is False and any("seed" in x for x in r["problems"])
-    seed = {"truth": "t", "hook": "h", "stake": "s", "antagonist": "a", "clock_ticks": 5,
+    seed = {"truth": "t", "hook": "h", "stake": "s", "antagonist": "a", "clock_turns": 5,
             "anchor_npcs": ["a", "b", "c", "d"], "first_place": "p", "opening_handout": "o"}
     assert eng.submit_package("p_jorge", pkg["task_id"], adventure_pkg(generation="emergent", seed=seed))["accepted"] is True
 
@@ -496,7 +496,7 @@ def test_game_package_flow(world):
     assert pkg["task"] == "create_game" and pkg["context"]["defaults"]["lethality"] == "high" and pkg["context"]["defaults"]["language"] == "es"
     assert pkg["context"]["adventure"]["title"] and "player_safe_text" not in pkg["context"]["adventure"]
     assert "PART B" not in json.dumps(pkg)
-    bad = eng.submit_package("p_jorge", pkg["task_id"], game_pkg(lethality="deadly", tick_interval_hours=0))
+    bad = eng.submit_package("p_jorge", pkg["task_id"], game_pkg(lethality="deadly", turn_interval_hours=0))
     assert bad["accepted"] is False and len(bad["problems"]) == 2
     ok = eng.submit_package("p_jorge", pkg["task_id"], game_pkg(lethality="low", title="My run", pvp="none"))
     assert ok["accepted"] is True and ok["game_id"] and ok["setup"]
@@ -622,7 +622,7 @@ def test_seeds_list_without_spoilers_and_generate_from_a_seed(world):
     assert eng.generate_adventure("p_jorge", seed_id="test_seed", generation="emergent")["package"]["context"]["generation"] == "emergent"
 
 
-def test_resolve_due_defers_ticks_when_time_is_short(world, monkeypatch):
+def test_resolve_due_defers_turns_when_time_is_short(world, monkeypatch):
     from server import config
     eng, store, gm, clock = world
     out = new_game(eng, "p_jorge", ADV)
@@ -630,11 +630,11 @@ def test_resolve_due_defers_ticks_when_time_is_short(world, monkeypatch):
     a = eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_pc")["deliveries"][0]["character_id"]
     eng.submit_action("p_jorge", gid, "character_confirm", "", a, {})
     clock["t"] += timedelta(hours=25)
-    monkeypatch.setattr(config, "TICK_RESERVE_SECONDS", config.FUNCTION_BUDGET_SECONDS + 1)
+    monkeypatch.setattr(config, "TURN_RESERVE_SECONDS", config.FUNCTION_BUDGET_SECONDS + 1)
     out = eng.resolve_due()
     assert out["checked"] == 1 and out["results"][0]["resolved"] is False
     assert out["results"][0]["reason"].startswith("deferred")
-    monkeypatch.setattr(config, "TICK_RESERVE_SECONDS", 0)
+    monkeypatch.setattr(config, "TURN_RESERVE_SECONDS", 0)
     assert eng.resolve_due()["results"][0]["resolved"] is True  # still due, so the next run takes it
 
 
@@ -716,65 +716,65 @@ def test_envelope_lists_takeovers_and_unclaimed_pregenerated(world):
     assert claimed == "pregen_test_b" and env["unclaimed_pregenerated"] == ["pregen_test_pc", "pregen_test_c", "pregen_test_d"]
 
 
-def test_an_answer_cannot_move_the_clock_to_another_tick(world):
+def test_an_answer_cannot_move_the_clock_to_another_turn(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng)
     g0, _ = store.get("game", gid)
-    t0 = g0["clock"]["tick"]
+    t0 = g0["clock"]["turn"]
 
     def rule(env, n):
         r = base()
         r["handling"] = "answered"
         r["results"][cid] = [item("ok")]
-        r["state_changes"] = [{"op": "merge", "entity": "game", "id": gid, "patch": {"clock": {"tick": t0 + 1}}},
-                              {"op": "merge", "entity": "character", "id": cid, "patch": {"tick_state": {"tick": t0 + 1}}}]
+        r["state_changes"] = [{"op": "merge", "entity": "game", "id": gid, "patch": {"clock": {"turn": t0 + 1}}},
+                              {"op": "merge", "entity": "character", "id": cid, "patch": {"turn_state": {"turn": t0 + 1}}}]
         return r
     eng.gm.rule = rule
     eng.submit_action("p_jorge", gid, "free_query", "what do I know?", cid)
     g1, _ = store.get("game", gid)
     c1, _ = store.get("character", cid)
-    assert g1["clock"]["tick"] == t0 and c1["tick_state"]["tick"] == t0
+    assert g1["clock"]["turn"] == t0 and c1["turn_state"]["turn"] == t0
 
 
-def test_tick_closing_hour_defaults_to_3am_madrid_and_is_configurable():
+def test_turn_closing_hour_defaults_to_3am_madrid_and_is_configurable():
     from server.engine import Engine
     utc = timezone.utc
     # opened 23:54 Madrid: the first 03:00 Madrid at or after twelve hours later
-    assert Engine._tick_closes(datetime(2026, 11, 6, 22, 54, tzinfo=utc), {"tick_interval_hours": 24}) == datetime(2026, 11, 8, 2, 0, tzinfo=utc)
+    assert Engine._turn_closes(datetime(2026, 11, 6, 22, 54, tzinfo=utc), {"turn_interval_hours": 24}) == datetime(2026, 11, 8, 2, 0, tzinfo=utc)
     # opened right after the previous 03:00 (02:05 UTC = 03:05 Madrid): the next 03:00 is almost exactly 24 hours later
-    assert Engine._tick_closes(datetime(2026, 11, 7, 2, 5, tzinfo=utc), {"tick_interval_hours": 24}) == datetime(2026, 11, 8, 2, 0, tzinfo=utc)
+    assert Engine._turn_closes(datetime(2026, 11, 7, 2, 5, tzinfo=utc), {"turn_interval_hours": 24}) == datetime(2026, 11, 8, 2, 0, tzinfo=utc)
     # summer time: 03:00 Madrid is 01:00 UTC
-    assert Engine._tick_closes(datetime(2026, 7, 7, 1, 5, tzinfo=utc), {"tick_interval_hours": 24}) == datetime(2026, 7, 8, 1, 0, tzinfo=utc)
+    assert Engine._turn_closes(datetime(2026, 7, 7, 1, 5, tzinfo=utc), {"turn_interval_hours": 24}) == datetime(2026, 7, 8, 1, 0, tzinfo=utc)
     # another hour and timezone, midnight included
-    s = {"tick_interval_hours": 24, "tick_close_hour": 0, "tick_timezone": "UTC"}
-    assert Engine._tick_closes(datetime(2026, 11, 7, 0, 3, tzinfo=utc), s) == datetime(2026, 11, 8, 0, 0, tzinfo=utc)
+    s = {"turn_interval_hours": 24, "turn_close_hour": 0, "turn_timezone": "UTC"}
+    assert Engine._turn_closes(datetime(2026, 11, 7, 0, 3, tzinfo=utc), s) == datetime(2026, 11, 8, 0, 0, tzinfo=utc)
     # 48 hours: still a fixed hour, about two days later
-    assert Engine._tick_closes(datetime(2026, 11, 7, 2, 5, tzinfo=utc), {"tick_interval_hours": 48}) == datetime(2026, 11, 9, 2, 0, tzinfo=utc)
+    assert Engine._turn_closes(datetime(2026, 11, 7, 2, 5, tzinfo=utc), {"turn_interval_hours": 48}) == datetime(2026, 11, 9, 2, 0, tzinfo=utc)
     # no fixed hour, or a time step that is not whole days: exactly one interval
     t0 = datetime(2026, 11, 7, 9, 17, tzinfo=utc)
-    assert Engine._tick_closes(t0, {"tick_interval_hours": 24, "tick_close_hour": -1}) == t0 + timedelta(hours=24)
-    assert Engine._tick_closes(t0, {"tick_interval_hours": 6}) == t0 + timedelta(hours=6)
+    assert Engine._turn_closes(t0, {"turn_interval_hours": 24, "turn_close_hour": -1}) == t0 + timedelta(hours=24)
+    assert Engine._turn_closes(t0, {"turn_interval_hours": 6}) == t0 + timedelta(hours=6)
 
 
 def test_game_creation_takes_the_closing_hour(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng)
     g, _ = store.get("game", gid)
-    assert g["settings"]["tick_close_hour"] == 3 and g["settings"]["tick_timezone"] == "Europe/Madrid"
-    assert g["clock"]["tick_closes"].endswith("Z")
-    closes = datetime.fromisoformat(g["clock"]["tick_closes"].replace("Z", "+00:00"))
+    assert g["settings"]["turn_close_hour"] == 3 and g["settings"]["turn_timezone"] == "Europe/Madrid"
+    assert g["clock"]["turn_closes"].endswith("Z")
+    closes = datetime.fromisoformat(g["clock"]["turn_closes"].replace("Z", "+00:00"))
     assert closes.hour == 2 and closes.minute == 0   # 03:00 Madrid in winter
 
 
 def test_a_player_can_choose_the_closing_hour_and_bad_values_are_rejected(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng)  # default game, for the helpers
-    out = new_game(eng, "p_ana", settings={"tick_close_hour": 0, "tick_timezone": "UTC"})
+    out = new_game(eng, "p_ana", settings={"turn_close_hour": 0, "turn_timezone": "UTC"})
     g, _ = store.get("game", out["game_id"])
-    assert g["settings"]["tick_close_hour"] == 0 and g["settings"]["tick_timezone"] == "UTC"
+    assert g["settings"]["turn_close_hour"] == 0 and g["settings"]["turn_timezone"] == "UTC"
     pkg = eng.create_game("p_ana", ADV)["package"]
-    bad = eng.submit_package("p_ana", pkg["task_id"], game_pkg(tick_close_hour=24, tick_timezone="Mars/Olympus"))
-    assert not bad.get("accepted", True) and any("tick_close_hour" in p for p in bad["problems"]) and any("tick_timezone" in p for p in bad["problems"])
+    bad = eng.submit_package("p_ana", pkg["task_id"], game_pkg(turn_close_hour=24, turn_timezone="Mars/Olympus"))
+    assert not bad.get("accepted", True) and any("turn_close_hour" in p for p in bad["problems"]) and any("turn_timezone" in p for p in bad["problems"])
 
 
 def test_pregenerated_choice_is_enforced_by_the_server(world):
