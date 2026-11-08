@@ -70,7 +70,7 @@ class Usage:
             waited += 2
 
     # ---- call statistics (TLR-08-006): what every AI Master call cost, by level, tier, request type and game
-    STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries", "cache_hit", "cache_created", "cache_off", "cache_stale",
+    STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries", "cache_hit", "cache_created", "cache_off", "cache_stale", "breaker_open", "breaker_tripped",
                    "tokens_in", "tokens_cached", "tokens_out", "tokens_thought", "latency_ms")
 
     def record(self, entry):
@@ -92,6 +92,8 @@ class Usage:
                 if outcome in bucket:
                     bucket[outcome] += 1
                 bucket["retries"] += int(entry.get("retries") or 0)
+                if entry.get("breaker") in ("open", "tripped"):
+                    bucket["breaker_" + entry["breaker"]] += 1
                 cache = (entry.get("cache") or "").split(":")[0]
                 if "cache_" + cache in bucket:
                     bucket["cache_" + cache] += 1
@@ -118,6 +120,15 @@ class Usage:
             by[label] = row
         return {"day": day, "by_level_tier_mode_kind": by, "by_game": doc["games"], "cache_note": doc.get("cache_note")}
 
+    def breakers(self):
+        """The models that are being skipped now, with the time left and the reason."""
+        now = self.now_fn().timestamp()
+        out = []
+        for doc, _ in self.store.find("usage"):
+            if str(doc.get("id", "")).startswith("breaker:") and doc.get("until", 0) > now:
+                out.append({"model": doc.get("model"), "seconds_left": int(doc["until"] - now), "reason": doc.get("reason")})
+        return out
+
     def today(self):
         out = {}
         for tier in config.GEMINI_LIMITS:
@@ -140,6 +151,7 @@ class GeminiGM:
         self._api_key = api_key
         self.usage = usage
         self.last = {}
+        self._breakers = {}  # model -> {"until", "reason", "checked"}: a strong model that keeps failing is left alone for a while
         self._meta = {}  # token counts and retries of the call in progress
         self._structured = config.GEMINI_STRUCTURED_OUTPUT
         self._caches = {}  # cache key -> {"name", "expires"}: the provider-side copy of an instruction text
@@ -339,22 +351,76 @@ class GeminiGM:
 
     last_meta = {}
 
+    # ---- circuit breaker: when the strong model times out or answers 5xx, every request would wait for its full timeout (100 s) before the
+    # light model answers, which is longer than a player's client waits. After one such failure the strong model is skipped for
+    # STRONG_BREAKER_SECONDS, by every server instance (the note is in the database), and the light model answers at once.
+    def _breaker(self, model):
+        """The open breaker of `model` as {"until", "reason"}, or None."""
+        import time
+        now = time.time()
+        b = self._breakers.get(model)
+        if b is None or b["checked"] < now - 20:  # the shared note is read at most every 20 seconds
+            note = None
+            if self.usage is not None:
+                try:
+                    note = self.usage.store.get("usage", f"breaker:{model}")[0]
+                except Exception:
+                    note = None
+            b = self._breakers[model] = {"until": (note or {}).get("until", 0), "reason": (note or {}).get("reason", ""), "checked": now}
+        return b if b["until"] > now else None
+
+    def _trip_breaker(self, model, e):
+        import time
+        if config.STRONG_BREAKER_SECONDS <= 0:
+            return
+        now = time.time()
+        reason = f"{type(e).__name__} {e}"[:120]
+        self._breakers[model] = {"until": now + config.STRONG_BREAKER_SECONDS, "reason": reason, "checked": now}
+        self._meta["breaker"] = "tripped"
+        self._write_breaker(model, now + config.STRONG_BREAKER_SECONDS, reason)
+
+    def _close_breaker(self, model):
+        """The strong model answered: forget an earlier failure."""
+        if self._breakers.get(model, {}).get("until", 0) or self._breakers.get(model) is None:
+            self._breakers[model] = {"until": 0, "reason": "", "checked": __import__("time").time()}
+            self._write_breaker(model, 0, "", only_if_present=True)
+
+    def _write_breaker(self, model, until, reason, only_if_present=False):
+        if self.usage is None:
+            return
+        try:
+            doc, ver = self.usage.store.get("usage", f"breaker:{model}")
+            if doc is None and only_if_present:
+                return
+            self.usage.store.put("usage", f"breaker:{model}", {"id": f"breaker:{model}", "model": model, "until": until, "reason": reason,
+                                                                "at": __import__("time").time()}, ver)
+        except Exception:
+            pass
+
     def _call(self, system: str, user: str, tier: str = "light") -> str:
         degraded = None
         if tier == "turn":
-            r = self.usage.reserve("turn") if self.usage else "ok"
+            br = self._breaker(config.GEMINI_MODEL_TURN)
+            if br:
+                self._meta["breaker"] = "open"
+                degraded = f"strong model skipped for {int(br['until'] - __import__('time').time())} more seconds after: {br['reason']}"
+                r = None
+            else:
+                r = self.usage.reserve("turn") if self.usage else "ok"
             if r == "minute":
                 raise GMBusy("the strong AI Master model is at its per-minute limit; the turn will be retried shortly")
             if r == "ok":
                 try:
                     out = self._generate_retrying(config.GEMINI_MODEL_TURN, config.GEMINI_THINKING_LEVEL_TURN, system, user)
                     self.last = {"tier": "turn", "model": config.GEMINI_MODEL_TURN, "degraded": None}
+                    self._close_breaker(config.GEMINI_MODEL_TURN)
                     return out
                 except Exception as e:
                     if not self._retryable(e):
                         raise
                     degraded = "strong model unavailable (" + type(e).__name__ + ")"
-            else:
+                    self._trip_breaker(config.GEMINI_MODEL_TURN, e)
+            elif r == "day":
                 degraded = "strong model daily quota used up"
         r = (self.usage.reserve_waiting("light") if self.usage else "ok")
         if r != "ok":

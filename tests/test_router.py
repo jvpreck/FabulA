@@ -29,7 +29,7 @@ def world():
 def test_engine_picks_the_tier(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng)
-    assert "turn" in gm.tiers                      # the character cross-check uses the strong model
+    assert "turn" not in gm.tiers                  # the character cross-check uses the light model: a player is waiting for it
     gm.tiers.clear()
     eng.submit_action("p_jorge", gid, "free_query", "what do I see?", cid)
     assert gm.tiers and set(gm.tiers) == {"light"}  # single-player requests use the light model
@@ -101,7 +101,7 @@ def test_falls_back_to_light_when_the_strong_model_errors():
     g = FakeGemini(usage(store, clock), fail=RuntimeError("429 RESOURCE_EXHAUSTED"))
     g.call("s", "u", tier="turn")
     assert [m for m, _ in g.sent] == [config.GEMINI_MODEL_TURN, config.GEMINI_MODEL_LIGHT] and g.last["degraded"]
-    g2 = FakeGemini(usage(store, clock), fail=ValueError("bad request: invalid schema"))
+    g2 = FakeGemini(usage(MemoryStore(), clock), fail=ValueError("bad request: invalid schema"))
     with pytest.raises(ValueError):                 # a real bug is not hidden by the fallback
         g2.call("s", "u", tier="turn")
 
@@ -324,3 +324,82 @@ def test_a_quick_504_is_still_retried(monkeypatch):
     g = FlakyGemini(usage(store, clock), [Err504("504 Gateway Timeout")])
     assert g.call("s", "u") == "{}"
     assert len(g.pauses) == 1 and len(g.calls) == 2
+
+
+def test_the_character_check_can_be_sent_back_to_the_strong_model(monkeypatch):
+    monkeypatch.setattr(config, "CHARACTER_CHECK_TIER", "turn")
+    store, gm, clock = MemoryStore(), ScriptedGM(standard_gm), Clock()
+    CHECK["fail_next"] = 0
+    eng = Engine(store, gm, now_fn=clock)
+    start_solo(eng)
+    assert "turn" in gm.tiers
+
+
+# ------------------------------------------------------------------ the strong model that keeps failing is left alone for a while
+class Timeouts(GeminiGM):
+    """A strong model that times out (as the live one does on large prompts) and a light model that answers."""
+
+    def __init__(self, usage, strong_fails=True):
+        super().__init__(usage=usage)
+        self.sent, self.strong_fails = [], strong_fails
+
+    def _generate(self, model, level, system, user):
+        self.sent.append(model)
+        if model == config.GEMINI_MODEL_TURN and self.strong_fails:
+            raise Exception("504 Gateway Timeout")
+        return "{}"
+
+
+def test_after_one_failure_the_strong_model_is_skipped_and_the_light_one_answers_at_once():
+    store, clock = MemoryStore(), Clock()
+    g = Timeouts(usage(store, clock))
+    g.call("s", "u", tier="turn")
+    assert g.sent == [config.GEMINI_MODEL_TURN, config.GEMINI_MODEL_LIGHT] and g.last_meta["breaker"] == "tripped"
+    g.sent.clear()
+    g.call("s", "u", tier="turn")
+    assert g.sent == [config.GEMINI_MODEL_LIGHT], "the strong model is not asked again"
+    assert g.last["tier"] == "light" and "skipped" in g.last["degraded"] and g.last_meta["breaker"] == "open"
+    assert Usage(store, clock).today()["turn"]["used_today"] == 1, "a skipped call does not use the strong model's daily quota"
+
+
+def test_the_skip_is_shared_with_other_server_instances_and_ends_after_its_time(monkeypatch):
+    store, clock = MemoryStore(), Clock()
+    Timeouts(usage(store, clock)).call("s", "u", tier="turn")
+    other = Timeouts(usage(store, clock), strong_fails=False)
+    other.call("s", "u", tier="turn")
+    assert other.sent == [config.GEMINI_MODEL_LIGHT], "another instance sees the note in the database"
+    import time as _t
+    real = _t.time
+    monkeypatch.setattr(_t, "time", lambda: real() + config.STRONG_BREAKER_SECONDS + 30)
+    other._breakers.clear()
+    other.sent.clear()
+    other.call("s", "u", tier="turn")
+    assert other.sent == [config.GEMINI_MODEL_TURN] and other.last["tier"] == "turn", "tried again after the time, and it answered"
+    other.sent.clear()
+    other.call("s", "u", tier="turn")
+    assert other.sent == [config.GEMINI_MODEL_TURN], "a success closes the breaker"
+
+
+def test_a_bad_request_does_not_trip_the_breaker():
+    g = FakeGemini(usage(MemoryStore(), Clock()), fail=ValueError("bad request: invalid schema"))
+    with pytest.raises(ValueError):
+        g.call("s", "u", tier="turn")
+    assert g._breaker(config.GEMINI_MODEL_TURN) is None
+
+
+def test_the_breaker_can_be_switched_off(monkeypatch):
+    monkeypatch.setattr(config, "STRONG_BREAKER_SECONDS", 0)
+    g = Timeouts(usage(MemoryStore(), Clock()))
+    g.call("s", "u", tier="turn")
+    g.sent.clear()
+    g.call("s", "u", tier="turn")
+    assert g.sent == [config.GEMINI_MODEL_TURN, config.GEMINI_MODEL_LIGHT]
+
+
+def test_breaker_events_are_counted_in_the_call_statistics():
+    store = MemoryStore()
+    u = Usage(store, Clock())
+    for b in ("tripped", "open", "open"):
+        u.record({"level": 4, "tier": "light", "mode": "resolve_turn", "kind": "-", "game_id": "g", "breaker": b})
+    row = next(iter(u.stats()["by_level_tier_mode_kind"].values()))
+    assert (row["breaker_tripped"], row["breaker_open"]) == (1, 2)

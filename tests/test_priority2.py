@@ -337,3 +337,31 @@ def test_a_refusal_for_one_model_does_not_stop_caching_for_the_other(monkeypatch
     gm._meta = {}
     gm._generate("gemini-3.5-flash-lite", "medium", BIG, "{}")
     assert gm._meta["cache"].startswith("off") and len(caches.created) == 2, "the light model is not asked again"
+
+
+def test_the_cache_and_the_breaker_work_together_on_a_failing_strong_model(monkeypatch):
+    """A strong model that times out while it is given a cached copy: the light model answers, the breaker closes the door on the strong
+    one, and the statistics show both the cache and the breaker."""
+    sent, caches = [], FakeCaches()
+
+    class Failing(FakeModels):
+        def generate_content(self, model, contents, config):
+            self.sent.append((model, config))
+            if "lite" not in model:
+                raise Exception("504 Gateway Timeout")
+            return type("R", (), {"text": "{}", "usage_metadata": None})()
+
+    store = MemoryStore()
+    gm = GeminiGM(usage=Usage(store), sleep=lambda s: None)
+    client = fake_client(caches, Failing(sent))
+    monkeypatch.setattr(gm, "_get", lambda: client)
+    monkeypatch.setattr(gm, "_get_beta", lambda: client)
+    assert gm.call(BIG, "{}", tier="turn") == "{}"
+    assert gm.last["tier"] == "light" and gm.last_meta["breaker"] == "tripped" and gm.last_meta["cache"] in ("created", "hit", "off")
+    n = len(sent)
+    gm.call(BIG, "{}", tier="turn")
+    assert all("lite" in m for m, _ in sent[n:]), "the strong model is not asked again"
+    assert gm.last_meta["breaker"] == "open"
+    gm.usage.record({"level": 4, "tier": "light", "mode": "resolve_turn", "kind": "-", "game_id": "g", "breaker": "open", "cache": "created"})
+    row = next(iter(gm.usage.stats()["by_level_tier_mode_kind"].values()))
+    assert row["breaker_open"] == 1 and row["cache_created"] == 1

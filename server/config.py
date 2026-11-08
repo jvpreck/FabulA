@@ -106,3 +106,8 @@ CACHE_MIN_CHARS = int(os.environ.get("CACHE_MIN_CHARS", "20000"))  # shorter ins
 # What a request of one character is told about the world (TLR-03-012). "off" sends the whole world, as before.
 ENVELOPE_RELEVANT = os.environ.get("ENVELOPE_RELEVANT", "on").lower() not in ("off", "0", "false", "no")
 ENVELOPE_WORLD_NARROW_CHARS = int(os.environ.get("ENVELOPE_WORLD_NARROW_CHARS", "12000"))  # a world smaller than this is sent whole
+
+# The strong model times out or answers 5xx on large prompts. A player waiting for a character check must not wait for that, so the check
+# is made by the light model unless CHARACTER_CHECK_TIER=turn, and a strong model that has just failed is skipped for a while.
+CHARACTER_CHECK_TIER = "turn" if os.environ.get("CHARACTER_CHECK_TIER", "light").lower() == "turn" else "light"
+STRONG_BREAKER_SECONDS = int(os.environ.get("STRONG_BREAKER_SECONDS", "900"))  # 0 never skips the strong model
