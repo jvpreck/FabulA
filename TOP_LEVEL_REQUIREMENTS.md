@@ -15,6 +15,11 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-01-004** The turn length is set at game setup (default 24 hours). The closing hour and time zone are also configurable (default 03:00, Spain time). Solo games may close the turn as soon as the player has acted.
 - **TLR-01-005** Minor actions that affect only one character resolve immediately. Characters in the same place can talk instantly, without waiting for a turn.
 - **TLR-01-006** Lethality (low, moderate or high) is set per game. A player whose character dies can continue with a new character, a pregenerated one or an available NPC.
+- **TLR-01-007-Pending** Every player request is answered at one of four levels: (1) local in the client, (2) by the engine from the database, (3) by the AI Master immediately, (4) by the AI Master at the turn close.
+- **TLR-01-008-Pending** Level 1: the client answers from its synced data, without contacting the engine and using no AI Master quota, when the answer is already known (for example who an NPC was, or where the character first met someone). It may describe atmosphere but must not add facts that change the game world. Anything that would add such a fact goes to a higher level.
+- **TLR-01-009-Pending** Level 2: the engine answers from the database without calling the AI Master and without using its quota (inventory, who is in the character's location, time left in the turn, messages, public status of others, speech between characters).
+- **TLR-01-010-Pending** Level 3: the AI Master resolves immediately any request that affects only the requesting character and touches nothing shared with other players (other characters, shared NPC or location state, contested objects).
+- **TLR-01-011-Pending** Level 4: a request that involves other players or shared state waits for the turn close and is resolved together with the others.
 
 ## 02. Players and access
 - **TLR-02-001** Each player uses their own AI client (Claude, ChatGPT, Grok or others) through an MCP custom connector. The engine needs no other front end.
@@ -30,6 +35,9 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-03-004** Dice are rolled by the server, never by the AI Master or the client.
 - **TLR-03-005** The engine uses a strong model for closing turns and a light model for everything else, within the provider's free-tier limits. When the strong model is rate-limited the turn is deferred. When its quota is exhausted or it fails the turn falls back to the light model, and the turn record shows this.
 - **TLR-03-006** An invalid AI response is rejected as a whole and retried, and no partial result is stored.
+- **TLR-03-007-Pending** The client declares the structured request (type and targets) and the level it expects. The server decides the level by fixed rules over the request and the game data, and the final level may be higher or lower than the client expected.
+- **TLR-03-008-Pending** The AI Master may change the level of a request in either direction when its content requires judgment. The player is told the reason.
+- **TLR-03-009-Pending** If the AI Master is unavailable or over its limits, a level 3 request is queued as level 4 instead of failing.
 
 ## 04. Characters
 - **TLR-04-001** A player can generate a character, choose a pregenerated one, supply their own for validation, or take over an NPC.
@@ -53,9 +61,12 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-07-001** Creative work (character, game settings, adventure) is done as work packages in the player's own client. The server validates the result and returns the problems to fix.
 - **TLR-07-002** After each result the client shows the narration, notebook, status, available illustrations and next possible actions.
 - **TLR-07-003** Illustrations are optional per game and consistent in style. Each is visible only to the characters who could see it, delivered as short-lived links.
+- **TLR-07-004-Pending** The client tells the player when a request was queued, and that the answer arrives at the turn close.
+- **TLR-07-005-Pending** Before answering a time-sensitive question locally, the client refreshes its synced data from the engine.
 
 ## 08. Operation and cost
 - **TLR-08-001** The engine runs on free or low-cost tiers (Vercel, Supabase, Gemini, Cloudflare), with guards against exceeding their limits.
 - **TLR-08-002** An external scheduler resolves due turns automatically, at least every 5 minutes.
 - **TLR-08-003** The host can manage games, players, adventures and usage through admin commands, never through the player tools.
 - **TLR-08-004** Requests stay within the serverless time limit. Slow AI calls fail with a clear message instead of leaving the player waiting.
+- **TLR-08-005-Pending** The engine records the level at which each request was answered, so usage and costs per level can be monitored.
