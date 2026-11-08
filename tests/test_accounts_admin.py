@@ -8,6 +8,9 @@ from server.db import MemoryStore
 from server.engine import Engine, EngineError
 from test_engine import ScriptedGM, standard_gm, ADV, new_game, CHECK
 
+PG = {"p_jorge": "pregen_test_pc", "p_ana": "pregen_test_b", "p_b": "pregen_test_b", "p_third": "pregen_test_c"}   # one pregenerated character per player
+
+
 
 @pytest.fixture
 def world():
@@ -80,7 +83,7 @@ def test_admin_delete_game_cascades(world):
     eng, store = world
     a = eng.authenticate(eng.register_player("Ana")["player_key"])
     gid = new_game(eng, a, ADV)["game_id"]
-    eng.generate_character(a, gid, "pregen", pregen_id="pregen_test_pc")
+    eng.generate_character(a, gid, "pregen", pregen_id=PG.get(a, "pregen_test_pc"))
     assert store.find("character", game_id=gid)
     out = admin.run(eng, "delete_game", {"game_id": gid})
     assert out["deleted"] == gid and out["records"]["character"] == 1

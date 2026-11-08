@@ -11,7 +11,7 @@ recommended:
   tick_interval_hours: 24
   early_close_solo: true
   early_close_party: false
-pregenerated: [pregen_test_pc]
+pregenerated: [pregen_test_pc, pregen_test_b, pregen_test_c, pregen_test_d]
 language: en
 summary: A fictional fixture used only by the automated tests. It is not a real adventure.
 ---

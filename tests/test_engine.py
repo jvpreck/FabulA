@@ -8,6 +8,9 @@ from server import files, prompt, config
 from server.db import MemoryStore
 from server.engine import Engine, EngineError
 
+PG = {"p_jorge": "pregen_test_pc", "p_ana": "pregen_test_b", "p_b": "pregen_test_b", "p_third": "pregen_test_c"}   # one pregenerated character per player
+
+
 ADV = "test_adventure"
 
 
@@ -151,7 +154,7 @@ def world():
 def start_solo(eng, player="p_jorge"):
     out = new_game(eng, player, ADV, language="en")
     gid = out["game_id"]
-    ch = eng.generate_character(player, gid, "pregen", pregen_id="pregen_test_pc")
+    ch = eng.generate_character(player, gid, "pregen", pregen_id=PG.get(player, "pregen_test_pc"))
     cid = ch["deliveries"][0]["character_id"]
     eng.submit_action(player, gid, "character_confirm", "yes", cid, {"approved": True})
     return gid, cid
@@ -243,7 +246,7 @@ def test_party_witness_say_and_privacy(world):
     out = new_game(eng, "p_jorge", ADV)
     gid = out["game_id"]
     eng.join_game("p_ana", gid)
-    a = eng.generate_character("p_jorge", gid, "pregen", pregen_id="x")["deliveries"][0]["character_id"]
+    a = eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_pc")["deliveries"][0]["character_id"]
     b = new_char(eng, "p_ana", gid, "a doctor")["deliveries"][0]["character_id"]
     eng.submit_action("p_jorge", gid, "character_confirm", "", a, {"approved": True})
     eng.submit_action("p_ana", gid, "character_confirm", "", b, {"approved": True})
@@ -374,7 +377,7 @@ def test_low_lethality_blocks_unchosen_death(world):
     eng, store, gm, clock = world
     out = new_game(eng, "p_jorge", ADV, settings={"lethality": "low"})
     gid = out["game_id"]
-    cid = eng.generate_character("p_jorge", gid, "pregen")["deliveries"][0]["character_id"]
+    cid = eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_pc")["deliveries"][0]["character_id"]
     eng.submit_action("p_jorge", gid, "character_confirm", "", cid, {})
     n = {"i": 0}
     orig = eng.gm.rule
@@ -397,7 +400,7 @@ def test_tick_due_and_resolve_due(world):
     out = new_game(eng, "p_jorge", ADV)
     gid = out["game_id"]
     eng.join_game("p_ana", gid)
-    a = eng.generate_character("p_jorge", gid, "pregen")["deliveries"][0]["character_id"]
+    a = eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_pc")["deliveries"][0]["character_id"]
     b = new_char(eng, "p_ana", gid, "d")["deliveries"][0]["character_id"]
     eng.submit_action("p_jorge", gid, "character_confirm", "", a, {})
     eng.submit_action("p_ana", gid, "character_confirm", "", b, {})
@@ -588,7 +591,7 @@ def test_envelope_hides_other_characters_knowledge_in_intake(world):
     out = new_game(eng, "p_jorge", ADV)
     gid = out["game_id"]
     eng.join_game("p_ana", gid)
-    a = eng.generate_character("p_jorge", gid, "pregen")["deliveries"][0]["character_id"]
+    a = eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_pc")["deliveries"][0]["character_id"]
     b = new_char(eng, "p_ana", gid, "d")["deliveries"][0]["character_id"]
     eng.submit_action("p_jorge", gid, "character_confirm", "", a, {})
     eng.submit_action("p_ana", gid, "character_confirm", "", b, {})
@@ -624,7 +627,7 @@ def test_resolve_due_defers_ticks_when_time_is_short(world, monkeypatch):
     eng, store, gm, clock = world
     out = new_game(eng, "p_jorge", ADV)
     gid = out["game_id"]
-    a = eng.generate_character("p_jorge", gid, "pregen")["deliveries"][0]["character_id"]
+    a = eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_pc")["deliveries"][0]["character_id"]
     eng.submit_action("p_jorge", gid, "character_confirm", "", a, {})
     clock["t"] += timedelta(hours=25)
     monkeypatch.setattr(config, "TICK_RESERVE_SECONDS", config.FUNCTION_BUDGET_SECONDS + 1)
@@ -710,7 +713,7 @@ def test_envelope_lists_takeovers_and_unclaimed_pregenerated(world):
     env = gm.calls[-1][1]
     assert [t["npc_id"] for t in env["takeover_options"]] == ["npc_clerk"] and all("pregen_id" not in t for t in env["takeover_options"])
     claimed = store.get("character", cid)[0].get("pregen_id")
-    assert claimed == "pregen_test_pc" and "unclaimed_pregenerated" not in env       # the only pregenerated character is taken
+    assert claimed == "pregen_test_b" and env["unclaimed_pregenerated"] == ["pregen_test_pc", "pregen_test_c", "pregen_test_d"]
 
 
 def test_an_answer_cannot_move_the_clock_to_another_tick(world):
@@ -772,3 +775,40 @@ def test_a_player_can_choose_the_closing_hour_and_bad_values_are_rejected(world)
     pkg = eng.create_game("p_ana", ADV)["package"]
     bad = eng.submit_package("p_ana", pkg["task_id"], game_pkg(tick_close_hour=24, tick_timezone="Mars/Olympus"))
     assert not bad.get("accepted", True) and any("tick_close_hour" in p for p in bad["problems"]) and any("tick_timezone" in p for p in bad["problems"])
+
+
+def test_pregenerated_choice_is_enforced_by_the_server(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng, "p_ana")                                    # p_ana holds pregen_test_b
+    eng.join_game("p_jorge", gid)
+    with pytest.raises(EngineError) as e:                                  # no choice made: the server asks, the Master never picks
+        eng.generate_character("p_jorge", gid, "pregen")
+    assert "has not chosen" in str(e.value) and "pregen_test_c" in str(e.value) and "pregen_test_b" not in str(e.value)
+    with pytest.raises(EngineError) as e:                                  # taken by someone else
+        eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_b")
+    assert "already played" in str(e.value) and "pregen_test_pc" in str(e.value)
+    with pytest.raises(EngineError):
+        eng.generate_character("p_jorge", gid, "pregen", pregen_id="nobody_at_all")
+    r = eng.generate_character("p_jorge", gid, "pregen", pregen_id="Pregen Test C")   # a name instead of the id is understood
+    mine = r["deliveries"][0]["character_id"]
+    assert store.get("character", mine)[0]["pregen_id"] == "pregen_test_c"
+    # choosing again before confirming replaces the draft instead of keeping the first one
+    r2 = eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_d")
+    again = r2["deliveries"][0]["character_id"]
+    assert again != mine and store.get("character", again)[0]["pregen_id"] == "pregen_test_d"
+    assert store.get("character", mine)[0]["status"] == "gone"
+    # the one given up is free again
+    eng.join_game("p_third", gid)
+    assert eng.generate_character("p_third", gid, "pregen", pregen_id="pregen_test_c")
+
+
+def test_a_stray_draft_does_not_make_a_pregenerated_character_look_taken(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng, "p_ana")
+    g, v = store.get("game", gid)
+    stray = {"id": "c_stray", "game_id": gid, "player_id": "p_ana", "status": "active", "is_alive": True, "pregen_id": "pregen_test_pc", "name": "Left Over"}
+    store.put("character", "c_stray", stray, 0, {"game_id": gid, "player_id": "p_ana", "is_alive": True})   # a character the roster does not point to
+    eng.join_game("p_jorge", gid)
+    assert eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_pc")             # not refused
+    env = gm.calls[-1][1]
+    assert all(c["id"] != "c_stray" for c in env["characters"])                                          # and the Master never sees it

@@ -10,6 +10,9 @@ from server.gm import Usage
 from server.images import ImageError, ImageService, MemoryImageStorage
 from test_engine import ScriptedGM, standard_gm, ADV, new_game, CHECK, game_pkg
 
+PG = {"p_jorge": "pregen_test_pc", "p_ana": "pregen_test_b", "p_b": "pregen_test_b", "p_third": "pregen_test_c"}   # one pregenerated character per player
+
+
 
 class Clock:
     def __init__(self):
@@ -86,7 +89,7 @@ def portraits(store, gid):
 
 def start(eng, player, illustrations="on"):
     gid = new_game(eng, player, ADV, settings={"illustrations": illustrations})["game_id"]
-    cid = eng.generate_character(player, gid, "pregen", pregen_id="pregen_test_pc")["deliveries"][0]["character_id"]
+    cid = eng.generate_character(player, gid, "pregen", pregen_id=PG.get(player, "pregen_test_pc"))["deliveries"][0]["character_id"]
     eng.submit_action(player, gid, "character_confirm", "yes", cid, {"approved": True})
     return gid, cid
 
@@ -180,7 +183,7 @@ def test_only_the_characters_who_saw_it_can_get_it(world):
     eng, store, prov, storage, clock = world
     gid, cid = start(eng, "p_a")
     eng.join_game("p_b", gid)
-    eng.generate_character("p_b", gid, "pregen", pregen_id="pregen_test_pc")
+    eng.generate_character("p_b", gid, "pregen", pregen_id=PG.get("p_b", "pregen_test_pc"))
     eng.resolve_tick(gid)
     eng.process_images(limit=20)
     iid = scenes(store, gid)[0]["id"]
@@ -320,7 +323,7 @@ def test_npc_portrait_only_for_those_who_met_them_and_scenes_use_references(worl
     monkeypatch.setitem(config.GEMINI_LIMITS, "image", {"rpd": 500, "rpm": 500})
     gid, cid = start(eng, "p_a")
     eng.join_game("p_b", gid)
-    cid_b = eng.generate_character("p_b", gid, "pregen", pregen_id="pregen_test_pc")["deliveries"][0]["character_id"]
+    cid_b = eng.generate_character("p_b", gid, "pregen", pregen_id=PG.get("p_b", "pregen_test_pc"))["deliveries"][0]["character_id"]
     eng.submit_action("p_b", gid, "character_confirm", "yes", cid_b, {"approved": True})
     PROPOSALS["portraits"] = [{"subject_id": "npc_warden", "name": "Warden Pike", "appearance": "a stooped old man with a lantern jaw, grey greatcoat",
                                "signature_action": "unlocking a heavy door", "visible_to": ["FIRST"]},

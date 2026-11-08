@@ -5,6 +5,7 @@ import json
 import re
 import secrets
 import time
+import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -150,7 +151,8 @@ class Engine:
     # -------------------------------------------------------------- envelope
     def _envelope(self, ws, game, adventure, mode, request, requester_cid, dice_scale=1, previous_errors=None):
         gid = game["id"]
-        chars = ws.load_game_characters(gid)
+        known = self._roster_character_ids(game)
+        chars = [c for c in ws.load_game_characters(gid) if c["id"] in known or c.get("status") == "dead"]  # a stray draft nobody plays must not look taken
         full_all = mode == "resolve_tick" or game["phase"] != "active"
         sa = ws.get("submit_action", f"{gid}:{(game.get('clock') or {}).get('tick')}")
         out_chars = []
@@ -558,9 +560,47 @@ class Engine:
                         "pregen_id": pregen_id})
         return out
 
+    @staticmethod
+    def _roster_character_ids(game):
+        """Ids of the characters that really belong to the game: the roster's current ones and the history (replaced or dead). Anything else is a stray draft."""
+        ids = {r.get("character_id") for r in game.get("roster", []) if r.get("character_id")}
+        for h in game.get("roster_history", []):
+            ids.update(x for x in (h.get("character_id"), h.get("replaced_by")) if x)
+        return ids
+
+    def _claimed_pregenerated(self, ws, game, ignore_drafts_of=None):
+        """{pregen_id: player_id} for the pregenerated characters that players hold in this game. Stray drafts and retired drafts do not count, and
+        neither does the unconfirmed draft of `ignore_drafts_of` (a player who is choosing again)."""
+        known = self._roster_character_ids(game)
+        out = {}
+        for c in ws.find("character", game_id=game["id"]):
+            pid = c.get("pregen_id")
+            if not pid or c["id"] not in known or c.get("status") == "gone" and c.get("is_alive", True) is False and not c.get("death"):
+                continue
+            if ignore_drafts_of and c.get("player_id") == ignore_drafts_of and c.get("status") in ("draft", "validated", "gone"):
+                continue
+            out[pid] = c.get("player_id")
+        return out
+
     def _unclaimed_pregenerated(self, ws, game, adv):
-        claimed = {c.get("pregen_id") for c in ws.find("character", game_id=game["id"]) if c.get("pregen_id")}
+        claimed = self._claimed_pregenerated(ws, game)
         return [p for p in (adv.get("pregenerated") or []) if p not in claimed]
+
+    @staticmethod
+    def _slug(s):
+        s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode().lower()
+        return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+
+    def _match_pregenerated(self, options, raw):
+        """The adventure's pregenerated id that a client named by id or by name ("Roberta Caroll"), or None."""
+        s = self._slug(raw)
+        if not s:
+            return None
+        for p in options:
+            if self._slug(p) == s:
+                return p
+        hits = [p for p in options if s in self._slug(p) or self._slug(p) in s]
+        return hits[0] if len(hits) == 1 else None
 
     def list_takeovers(self, player_id, game_id):
         ws = self._ws()
@@ -1034,12 +1074,13 @@ class Engine:
 
     def adventure_catalog(self, player_id):
         out = [{"id": k, "title": v["meta"].get("title"), "ruleset": v["meta"].get("ruleset"), "players": v["meta"].get("players"),
-                "era": v["meta"].get("era"), "summary": v["meta"].get("summary"), "source": "file"}
+                "era": v["meta"].get("era"), "summary": v["meta"].get("summary"), "pregenerated": v["meta"].get("pregenerated") or [],
+                "source": "file"}
                for k, v in self._adventure_files().items()]
         for d, _ in self.store.find("adventure"):
             if d.get("owner_player_id") in (None, player_id):
                 out.append({"id": d["id"], "title": d.get("title"), "ruleset": d.get("ruleset_id"), "players": d.get("players"),
-                            "era": d.get("era"), "summary": d.get("summary"), "source": d.get("source")})
+                            "era": d.get("era"), "summary": d.get("summary"), "pregenerated": d.get("pregenerated") or [], "source": d.get("source")})
         return out
 
     def list_adventures(self, player_id):
@@ -1209,12 +1250,31 @@ class Engine:
             cur = ws.get("character", roster.get("character_id")) if roster.get("character_id") else None
             if cur and cur.get("replaces_character_id") == replaces and cur.get("status") in ("draft", "validated"):
                 return cur
-        elif roster.get("character_id"):
+        pregen_choice = None
+        if route == "pregen":
+            options = list((self._adventure(ws, game["adventure_id"]).get("pregenerated")) or [])
+            if options:  # the server, not the Master, decides what is taken and never picks a character for the player
+                claimed = self._claimed_pregenerated(ws, game, ignore_drafts_of=player["id"])
+                free = [p for p in options if p not in claimed]
+                listing = "; ".join(free) or "none left"
+                if not payload.get("pregen_id"):
+                    raise EngineError("the player has not chosen a pregenerated character yet: show them the available ones and ask which they want, then call again "
+                                      f"with pregen_id. Available pregen_id values: {listing}")
+                pregen_choice = self._match_pregenerated(options, payload.get("pregen_id"))
+                if pregen_choice is None:
+                    raise EngineError(f"unknown pregenerated character '{payload.get('pregen_id')}'. Available pregen_id values: {listing}")
+                if pregen_choice in claimed:
+                    raise EngineError(f"{pregen_choice} is already played by another player. Ask the player to choose another. Available pregen_id values: {listing}")
+                payload["pregen_id"] = pregen_choice
+        if roster.get("character_id") and not replaces:
             cur = ws.get("character", roster["character_id"])
             if cur and cur.get("is_alive", True) and cur.get("status") not in ("gone", "committed", "dead"):
                 if cur.get("status") not in ("draft", "validated"):
                     raise EngineError("this player already has a character in this game; replace it only after it dies or is out of play")
-                return cur
+                if not (pregen_choice and cur.get("pregen_id") != pregen_choice):
+                    return cur
+                cur["status"], cur["is_alive"] = "gone", False  # the player chose a different pregenerated character: retire the unconfirmed draft
+                ws.touch("character", cur["id"])
         taken_npc = None
         if route == "from_npc":
             taken_npc = next((t for t in self._takeable_npcs(ws, game) if t["npc_id"] == payload.get("npc_id")), None)
