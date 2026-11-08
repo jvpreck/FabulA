@@ -150,6 +150,7 @@ How Drives cost and refresh Stability is in §5.3.
 - **Intimate correspondent [optional].** A mentor, protégé, relative or clergyman to whom the character confides everything. If the Investigator dies or goes mad, that person is a briefed replacement seed.
 
 ### 2.7 Character intake and validation [House]
+<!-- for: setup -->
 
 | # | Check | Passes when |
 |---|---|---|

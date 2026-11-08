@@ -70,7 +70,7 @@ class Usage:
             waited += 2
 
     # ---- call statistics (TLR-08-006): what every AI Master call cost, by level, tier, request type and game
-    STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries", "breaker_open", "breaker_tripped",
+    STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries", "cache_hit", "cache_created", "cache_off", "cache_stale", "breaker_open", "breaker_tripped",
                    "tokens_in", "tokens_cached", "tokens_out", "tokens_thought", "latency_ms")
 
     def record(self, entry):
@@ -94,9 +94,14 @@ class Usage:
                 bucket["retries"] += int(entry.get("retries") or 0)
                 if entry.get("breaker") in ("open", "tripped"):
                     bucket["breaker_" + entry["breaker"]] += 1
+                cache = (entry.get("cache") or "").split(":")[0]
+                if "cache_" + cache in bucket:
+                    bucket["cache_" + cache] += 1
                 bucket["latency_ms"] += int(entry.get("latency_ms") or 0)
                 for f in ("tokens_in", "tokens_cached", "tokens_out", "tokens_thought"):
                     bucket[f] += int(entry.get(f) or 0)
+            if (entry.get("cache") or "").startswith(("off", "stale")):
+                doc["cache_note"] = entry["cache"]  # the last reason the provider's cache was not used
             try:
                 self.store.put("usage", key, doc, ver)
                 return True
@@ -113,7 +118,7 @@ class Usage:
             row = dict(b)
             row["cached_share"] = round(b["tokens_cached"] / b["tokens_in"], 3) if b.get("tokens_in") else 0
             by[label] = row
-        return {"day": day, "by_level_tier_mode_kind": by, "by_game": doc["games"]}
+        return {"day": day, "by_level_tier_mode_kind": by, "by_game": doc["games"], "cache_note": doc.get("cache_note")}
 
     def breakers(self):
         """The models that are being skipped now, with the time left and the reason."""
@@ -149,6 +154,8 @@ class GeminiGM:
         self._breakers = {}  # model -> {"until", "reason", "checked"}: a strong model that keeps failing is left alone for a while
         self._meta = {}  # token counts and retries of the call in progress
         self._structured = config.GEMINI_STRUCTURED_OUTPUT
+        self._caches = {}  # cache key -> {"name", "expires"}: the provider-side copy of an instruction text
+        self._cache_off = {}  # model -> {"until", "note"}: the provider's free tier offers caching for some models only
         self._sleep = sleep or __import__("time").sleep
 
     def _get(self):
@@ -158,31 +165,134 @@ class GeminiGM:
             self._client = genai.Client(api_key=self._api_key or os.environ["GEMINI_API_KEY"])
         return self._client
 
+    def _get_beta(self):
+        """A client for the provider's v1beta API. The SDK defaults to v1, which does not serve cached content (the first live run
+        got 404 on creating one); a request that refers to a cached copy must go to v1beta as well."""
+        if getattr(self, "_beta_client", None) is None:
+            import os
+            from google import genai
+            from google.genai import types
+            self._beta_client = genai.Client(api_key=self._api_key or os.environ["GEMINI_API_KEY"],
+                                             http_options=types.HttpOptions(api_version="v1beta"))
+        return self._beta_client
+
     def _generate(self, model, level, system, user):
         from google.genai import types
-        cfg = dict(
-            system_instruction=system,
+        name = self._cached(model, system)
+        base = dict(
             response_mime_type="application/json",
             thinking_config=types.ThinkingConfig(thinking_level=level),
             http_options=types.HttpOptions(timeout=config.GEMINI_TIMEOUT_SECONDS * 1000),
         )
-        if self._structured:  # TLR-03-015: the provider enforces the response's shape
-            cfg["response_json_schema"] = schema.RESPONSE_SCHEMA
-        try:
-            resp = self._get().models.generate_content(model=model, contents=user, config=types.GenerateContentConfig(**cfg))
-        except Exception as e:
-            if self._structured and self._schema_rejected(e):  # the provider does not accept the schema: play on without it, and say so
-                self._structured = False
-                self._meta["schema_disabled"] = str(e)[:200]
-                cfg.pop("response_json_schema", None)
-                resp = self._get().models.generate_content(model=model, contents=user, config=types.GenerateContentConfig(**cfg))
+
+        def run(use_cache, structured):
+            cfg = dict(base)
+            if use_cache:  # TLR-03-011: the instructions are already at the provider; they cannot be sent again as a system instruction
+                cfg["cached_content"] = name
             else:
-                raise
+                cfg["system_instruction"] = system
+            if structured:  # TLR-03-015: the provider enforces the response's shape
+                cfg["response_json_schema"] = schema.RESPONSE_SCHEMA
+            client = self._get_beta() if use_cache else self._get()
+            return client.models.generate_content(model=model, contents=user, config=types.GenerateContentConfig(**cfg))
+
+        use_cache = name is not None
+        while True:
+            try:
+                resp = run(use_cache, self._structured)
+                break
+            except Exception as e:
+                if use_cache and "cache" in f"{type(e).__name__} {e}".lower():  # expired or removed: send the text this once and make a new copy later
+                    self._forget_cache(model, system)
+                    self._meta["cache"] = "stale: " + str(e)[:80]
+                    use_cache = False
+                elif self._structured and self._schema_rejected(e):  # the provider does not accept the schema: play on without it, and say so
+                    self._structured = False
+                    self._meta["schema_disabled"] = str(e)[:200]
+                else:
+                    raise
         um = getattr(resp, "usage_metadata", None)
         if um is not None:
             self._meta.update(tokens_in=getattr(um, "prompt_token_count", 0) or 0, tokens_cached=getattr(um, "cached_content_token_count", 0) or 0,
                               tokens_out=getattr(um, "candidates_token_count", 0) or 0, tokens_thought=getattr(um, "thoughts_token_count", 0) or 0)
         return resp.text or ""
+
+    # ---- TLR-03-011: the instructions are the same for every request of a game (and mostly for every game), so they are stored once at the
+    # provider (explicit context caching) and each request refers to the copy. Where the provider does not offer it (the free tier, a model
+    # without it) the first attempt is refused, the server notes that, sends the text as before, and tries again after CACHE_OFF_SECONDS.
+    @staticmethod
+    def _cache_key(model, system):
+        import hashlib
+        return hashlib.sha256((model + "\0" + system).encode("utf-8")).hexdigest()[:32]
+
+    def _forget_cache(self, model, system):
+        key = self._cache_key(model, system)
+        self._caches.pop(key, None)
+        if self.usage is not None:
+            try:
+                doc, ver = self.usage.store.get("usage", f"cache:{key}")
+                if doc is not None:
+                    doc["expires"] = 0
+                    self.usage.store.put("usage", f"cache:{key}", doc, ver)
+            except Exception:
+                pass
+
+    def _cached(self, model, system):
+        """The name of a provider-side copy of `system` for `model` (made now if there is none), or None to send the text."""
+        import time
+        if config.GEMINI_CONTEXT_CACHE == "off" or len(system) < config.CACHE_MIN_CHARS:
+            return None
+        now = time.time()
+        off = self._cache_off.get(model)
+        if (off is None or now >= off["until"]) and self.usage is not None:  # another instance may already have been refused for this model
+            try:
+                note = self.usage.store.get("usage", f"cache:off:{model}")[0]
+                if note and note.get("until", 0) > now:
+                    off = self._cache_off[model] = {"until": note["until"], "note": note.get("reason", "")}
+            except Exception:
+                pass
+        if off is not None and now < off["until"]:
+            self._meta.setdefault("cache", "off" + (": " + off["note"] if off["note"] else ""))
+            return None
+        key = self._cache_key(model, system)
+        entry = self._caches.get(key)
+        if entry is None and self.usage is not None:  # another instance may have made it
+            try:
+                doc = self.usage.store.get("usage", f"cache:{key}")[0]
+                if doc:
+                    entry = {"name": doc["name"], "expires": doc["expires"]}
+            except Exception:
+                entry = None
+        if entry and entry["expires"] - now > config.CACHE_REFRESH_SECONDS:
+            self._caches[key] = entry
+            self._meta["cache"] = "hit"
+            return entry["name"]
+        from google.genai import types
+        try:
+            made = self._get_beta().caches.create(model=model, config=types.CreateCachedContentConfig(
+                system_instruction=system, ttl=f"{config.GEMINI_CACHE_TTL_SECONDS}s", display_name="fabula-" + key[:12]))
+        except Exception as e:
+            until = now + (60 if self._transient(e) else config.CACHE_OFF_SECONDS)
+            note = f"{type(e).__name__} {e}"[:120]
+            self._cache_off[model] = {"until": until, "note": note}
+            self._meta["cache"] = "off: " + note
+            if self.usage is not None and not self._transient(e):  # tell the other instances, so each does not ask again
+                try:
+                    doc, ver = self.usage.store.get("usage", f"cache:off:{model}")
+                    self.usage.store.put("usage", f"cache:off:{model}", {"id": f"cache:off:{model}", "until": until, "reason": note}, ver)
+                except Exception:
+                    pass
+            return None
+        entry = {"name": made.name, "expires": now + config.GEMINI_CACHE_TTL_SECONDS}
+        self._caches[key] = entry
+        if self.usage is not None:
+            try:
+                doc, ver = self.usage.store.get("usage", f"cache:{key}")
+                self.usage.store.put("usage", f"cache:{key}", {"id": f"cache:{key}", "model": model, **entry}, ver)
+            except Exception:
+                pass
+        self._meta["cache"] = "created"
+        return entry["name"]
 
     @staticmethod
     def _schema_rejected(e):

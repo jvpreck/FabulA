@@ -24,6 +24,57 @@ def split_front_matter(text: str):
     return meta, text[m.end():]
 
 
+_TAG = re.compile(r"^<!--\s*(.*?)\s*-->\s*$")
+_HEADING = re.compile(r"^(#{1,6}) ")
+
+
+def _parse_tag(body: str):
+    """'for: setup, play; needs: generated' -> ({'setup', 'play'}, {'generated'}). Either part may be missing."""
+    use, needs = None, set()
+    for part in body.split(";"):
+        key, _, val = part.partition(":")
+        items = {x.strip() for x in val.split(",") if x.strip()}
+        if key.strip() == "for":
+            use = items
+        elif key.strip() == "needs":
+            needs = items
+    return use, needs
+
+
+def select_sections(text: str, profile: str | None = None, flags=()) -> str:
+    """TLR-05-007: a document is sectioned by purpose. A heading may be followed (within two lines) by a tag comment such as
+    `<!-- for: setup, play; needs: illustrations -->`. The section (the heading and everything under it, sub-sections included, up to the
+    next heading of the same or a higher level) is kept only when `profile` is one of the `for` names and every `needs` name is in `flags`.
+    An untagged section is always kept. The tag lines themselves are removed. With `profile` None nothing is left out (tags are still removed).
+    The profiles are `turn` (the turn closes), `play` (a request in a running game) and `setup` (game setup, characters, joining)."""
+    out, lines, i, skip_level, fence = [], text.split("\n"), 0, None, False
+    while i < len(lines):
+        line = lines[i]
+        if line.lstrip().startswith("```"):
+            fence = not fence
+        m = None if fence else _HEADING.match(line)
+        if m:
+            level = len(m.group(1))
+            if skip_level is not None and level <= skip_level:
+                skip_level = None
+            if skip_level is None:
+                tag = None
+                for j in (i + 1, i + 2):
+                    t = _TAG.match(lines[j]) if j < len(lines) else None
+                    if t and ("for:" in t.group(1) or "needs:" in t.group(1)):
+                        tag = (j, _parse_tag(t.group(1)))
+                        break
+                if tag:
+                    j, (use, needs) = tag
+                    del lines[j]
+                    if profile is not None and ((use is not None and profile not in use) or not needs <= set(flags)):
+                        skip_level = level
+        if skip_level is None:
+            out.append(line)
+        i += 1
+    return "\n".join(out)
+
+
 @lru_cache(maxsize=None)
 def read(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")

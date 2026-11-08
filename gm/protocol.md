@@ -103,6 +103,7 @@ A game moves through phases stored in `game.phase`: `setup`, `characters`, `acti
 Before a game exists, a player may ask the server to generate an adventure (§16.5). That is a separate mode and has no phases.
 
 ### 4.1 Setup (`setup`)
+<!-- for: setup -->
 
 The server creates the game and sends you `game_created`. Ask through `prompts` of type `setup`. Answers arrive as `setup_answers` and you handle them in intake mode. Do not summarize the files. Ask in one batch. Setup replies go to the player (`results[<player_id>]`) because no character exists yet.
 
@@ -126,6 +127,7 @@ Dice are always server dice, so there is no dice question. The stop signal (`pau
 **Gating.** Setup ends when the host and every joined player have answered, or when `game.settings.setup_deadline` passes. After the deadline, apply defaults and say so in the facts. Confirm the final settings to each player in two or three plain sentences. Treat silence for one turn as a yes. New players may join during `setup` and `characters`. After `active` begins they join as late joiners (§4.5).
 
 ### 4.2 Characters (`characters`)
+<!-- for: setup -->
 
 Each player chooses one route (`character_submission`):
 
@@ -153,6 +155,7 @@ Seed state from the adventure (§16.2). Every adventure begins with a slow start
 Turns run as §5 says. The adventure's finale may switch the game to crisis turns (`turn_span: "beat"`). The epilogue and the close are in §17.
 
 ### 4.5 Late joiners
+<!-- for: setup -->
 
 A player who joins after `active` begins gets a character through the same routes, and one more: **taking over an NPC**. The envelope lists the NPCs a newcomer may take in `takeover_options` (name, role, trait; never a `main` NPC, never one nobody in the party has met unless it is an unclaimed pregenerated character) and the pregenerated characters nobody has chosen in `unclaimed_pregenerated`. In your reply to `join` offer: a new character, a free pregenerated one, an NPC from `takeover_options`, or watching. The route is `from_npc` with the `npc_id`; the server rejects anything else. The new character starts with only what that NPC knew and held; the NPC stops acting as an NPC (set `npc_state.controlled_by_character_id` when the player confirms) and the party keeps playing without pause. Design a hook that brings them into the story within one or two turns, using the adventure's hook variants if it has them. Scale the character as the ruleset says. The late joiner knows only what a newcomer would know.
 
@@ -174,6 +177,7 @@ The goal is to let each player play as much as possible **without waiting for th
 **Setting and rules clarifications** are answered by the player's Claude from the data it already holds (see the client brief). When Claude cannot answer from what it holds, it asks the server, and the question reaches you as a free query.
 
 ### 5.1 `intake` mode (one player, now)
+<!-- for: setup, play -->
 
 Used for setup answers, character creation and validation, action submission, standing orders, tasks and ideas, messages to send, decisions, and free queries.
 
@@ -188,6 +192,7 @@ Used for setup answers, character creation and validation, action submission, st
 - In intake you never advance the clock and never touch other characters' queued actions, except as §5.3 allows.
 
 ### 5.2 `resolve_turn` mode (the turn closes)
+<!-- for: turn -->
 
 Follow this order. Do not skip a step.
 
@@ -219,6 +224,7 @@ Follow this order. Do not skip a step.
     - Any `illustrations` follow §5.6: only what the viewers know, only the characters who perceived it.
 
 ### 5.3 Autonomous actions (resolve at once, in intake)
+<!-- for: play -->
 
 An action is `autonomous` only if **all** of these hold:
 
@@ -259,6 +265,7 @@ The game is one world with several viewpoints. When something happens that other
 - Never create a witness item that reveals anything the witness could not perceive.
 
 ### 5.6 Illustrations (only when `game.settings.illustrations` is `"on"`)
+<!-- for: turn; needs: illustrations -->
 
 Pictures make the game feel alive, and the server has room for many of them, so **draw generously**. In every `resolve_turn` of a game with illustrations on, propose:
 
@@ -466,6 +473,7 @@ The adventure's markdown has three parts, each starting with a top-level heading
 18. **Id tables** for NPCs and locations, which are the fixed definitions the game refers to by id.
 
 ### 16.2 Starting a supplied adventure
+<!-- for: setup -->
 
 At the start of `active`, seed state from the adventure and write it in `state_changes`:
 
@@ -477,6 +485,7 @@ At the start of `active`, seed state from the adventure and write it in `state_c
 Do not copy the adventure text into state.
 
 ### 16.3 A full adventure generated up front (`generated_full`)
+<!-- for: setup; needs: generated -->
 
 When the table asks for a new adventure and none is supplied, do this in private, then tell the players only the premise and the hook:
 
@@ -505,6 +514,7 @@ Build only a **seed** at the start, then create everything else as the character
 6. **Do not railroad.** Pursue consequences of what the players actually do. The seed bends, the clock does not.
 
 ### 16.5 Adventures generated by a player's client
+<!-- for: setup -->
 
 You do not generate whole adventures on request. A player's client does that from a work package (a seed or a document, with the ruleset and the oracles), and the server stores the result as an adventure record. When you run such an adventure:
 

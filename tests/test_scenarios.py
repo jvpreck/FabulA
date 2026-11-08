@@ -21,7 +21,8 @@ from scenario_checks import run_checks
 from test_engine import ADV, PG, ScriptedGM, standard_gm, new_game, CHECK
 
 DATA = json.loads((Path(__file__).parent / "scenarios" / "scenarios.json").read_text(encoding="utf-8"))
-SCENARIOS = DATA["scenarios"]
+SCENARIOS = [s for s in DATA["scenarios"] if not s.get("live_only")]  # live_only ones need the real model
+LIVE_SCENARIOS = [s for s in DATA["scenarios"] if s.get("live")]
 D = {"d6": [3, 5, 2, 6, 4, 1] * 12, "d10": [7, 2, 9, 4, 10, 1] * 8, "d20": [14, 3, 19, 8, 12, 20] * 6}  # fixed, so the checks are deterministic
 PLAYER = "p_jorge"
 
@@ -112,26 +113,48 @@ def test_the_checks_themselves_catch_what_they_claim_to():
 LIVE = os.environ.get("FABULA_LIVE_SCENARIOS") == "1" and os.environ.get("GEMINI_API_KEY")
 
 
-class RecordingGM(GeminiGM):
+class HybridGM:
+    """Game setup is scripted, exactly as in the offline run, so it costs no quota and cannot vary. Only the scenario's own request goes to
+    the real model, with the real instructions (the profile, the sections and the cache are all in play)."""
+
+    def __init__(self, real, sc):
+        self.real, self.sc = real, sc
+        self.usage, self.last, self.last_meta, self.recorded = None, {}, {}, None
+
     def call(self, system, user, tier="light"):
-        raw = super().call(system, user, tier)
-        self.recorded = (user, raw)
-        return raw
+        env = json.loads(user)
+        req = env.get("request") or {}
+        turn_close = self.sc["request"]["kind"] == "resolve_turn" and env["mode"] == "resolve_turn"
+        if turn_close or (env["mode"] == "intake" and req.get("kind") == self.sc["request"]["kind"] and req.get("text") == self.sc["request"]["text"]):
+            raw = self.real.call(system, user, tier)
+            self.last, self.last_meta, self.recorded = self.real.last, self.real.last_meta, (user, raw, system, tier)
+            return raw
+        return json.dumps(standard_gm(env, 0))
 
 
 @pytest.mark.skipif(not LIVE, reason="set FABULA_LIVE_SCENARIOS=1 and GEMINI_API_KEY to run the scenarios against the real model")
-@pytest.mark.parametrize("sc", [s for s in SCENARIOS if s.get("live")], ids=[s["name"] for s in SCENARIOS if s.get("live")])
+@pytest.mark.parametrize("sc", LIVE_SCENARIOS, ids=[s["name"] for s in LIVE_SCENARIOS])
 def test_live_scenario(sc, monkeypatch):
     real = prompt.adventure_text
     extra = sc.get("live_adventure_extra", "")
     monkeypatch.setattr(prompt, "adventure_text", lambda adv: real(adv) + ("\n\n## Secret (GM only)\n\n" + extra if extra else ""))
-    gm = RecordingGM(usage=None)
+    gm = HybridGM(GeminiGM(usage=None), sc)
     eng = Engine(MemoryStore(), gm, now_fn=lambda: datetime(2026, 11, 1, 9, tzinfo=timezone.utc))
+    monkeypatch.setattr("server.engine.make_dice", lambda *a, **k: json.loads(json.dumps(D)))  # known dice, so the dice check is exact
     gid, cid = start(eng, sc.get("lethality"))
-    out = eng.submit_action(PLAYER, gid, sc["request"]["kind"], sc["request"]["text"], cid)
-    user, raw = gm.recorded
+    if sc["request"]["kind"] == "resolve_turn":  # the player acts (scripted), then the turn closes: that call goes to the strong model
+        eng.submit_action(PLAYER, gid, "action", sc["setup_action"], cid)
+        out = eng.resolve_turn(gid)
+    else:
+        out = eng.submit_action(PLAYER, gid, sc["request"]["kind"], sc["request"]["text"], cid)
+    user, raw, system, tier = gm.recorded
+    print(f"\n[{sc['name']}] tier={tier} instructions={len(system)} characters, cache={gm.last_meta.get('cache')}, "
+          f"model={gm.last.get('model')} degraded={gm.last.get('degraded')}, "
+          f"tokens in={gm.last_meta.get('tokens_in')} cached={gm.last_meta.get('tokens_cached')} out={gm.last_meta.get('tokens_out')} "
+          f"thinking={gm.last_meta.get('tokens_thought')} retries={gm.last_meta.get('retries')}, "
+          f"{gm.last_meta.get('latency_ms')} ms, schema off={bool(gm.last_meta.get('schema_disabled'))}")
     resp = parse(raw)
-    problems = run_checks(resp, json.loads(user), sc.get("live_secrets", ()) + sc.get("never_reaches_players", ()),
+    problems = run_checks(resp, json.loads(user), list(sc.get("live_secrets", ())) + list(sc.get("never_reaches_players", ())),
                           player_facing(eng, gid, cid, out))
     assert not any(problems.values()), json.dumps(problems, indent=2)
     assert schema.check(resp) == []

@@ -19,3 +19,17 @@ These files are adventure- and ruleset-independent. The server builds the AI Mas
 Prompt assembly order: protocol, oracles, state contract, the ruleset (`../rulesets/`), then the adventure (read from the private repository `jvpreck/rpg_adventures`, never from this one). The client brief and the client tasks are not sent to Gemini. The server sends `mcp_instructions.md` as MCP `instructions` when a client connects, the other client files through `start_here` and `get_guide`, and the tasks as work packages.
 
 Rulesets and adventures have YAML front matter (`id`, `title`, and so on) so the server can list them. See `../README.md`.
+
+## Sections: what each request is told
+
+The documents the AI Master reads (`protocol.md`, `oracles.md`, `state_and_messages.md`, and the rulesets) are sent in sections chosen by the kind of request, so a request does not carry instructions it cannot use (TLR-03-010, TLR-05-007). A heading may be followed on the next line by a tag comment:
+
+```
+## 5.2 `resolve_turn` mode (the turn closes)
+<!-- for: turn -->
+```
+
+- `for: turn, play, setup` keeps the section only for those request profiles. `turn` is the turn close. `setup` is creating a game, joining, setup answers and the character routes (`game_created`, `join`, `setup_answers`, `character_submission`, `character_confirm`). `play` is every other request.
+- `needs: illustrations, generated` keeps it only when pictures are on and the server can draw them (`illustrations`), or when the adventure is not a supplied one (`generated`).
+- The tag applies to the heading and everything under it, sub-sections included, up to the next heading of the same or a higher level. A section with no tag is always sent. The tag line itself is never sent.
+- When you add or move a tag, run the live scenarios (`FABULA_LIVE_SCENARIOS=1`, see `../README.md`): an instruction left out by mistake shows up as a worse answer, not as an error. `PROMPT_SLIM=off` sends everything again at once.

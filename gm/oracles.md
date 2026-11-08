@@ -47,6 +47,7 @@ Ask a yes or no question. Choose likelihood. Two d20 means two consecutive value
 ---
 
 ## 3. Adventure seeds
+<!-- needs: generated -->
 
 Roll or choose. Combine with the Mundane Cause generator (§8) and the antagonist generator (§9).
 
@@ -495,6 +496,7 @@ Roll one from each column and interpret in context.
 ---
 
 ## 8. The Mundane Cause generator (the truth)
+<!-- needs: generated -->
 
 Use this to build the truth for a new adventure, or to answer a question about why something is happening. Roll or choose one entry in each of the four tables, then make them coherent. Never use real-world procedures or instructions; stay at the level of story.
 
@@ -596,6 +598,7 @@ Use this to build the truth for a new adventure, or to answer a question about w
 ---
 
 ## 9. The antagonist
+<!-- needs: generated -->
 
 **Motivation (d20)**
 
@@ -893,6 +896,7 @@ Distortion tables belong to the ruleset that uses a distortion module. If the ru
 ---
 
 ## 15. Emergent adventure kit
+<!-- needs: generated -->
 
 Use this for `generated_full` and `generated_emergent` games (protocol §16). Everything here is private to the AI Master. All dice come from the stream and are logged.
 

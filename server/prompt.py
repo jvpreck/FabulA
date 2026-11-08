@@ -12,21 +12,35 @@ HEADER = (
 
 
 @lru_cache(maxsize=None)
-def _static():
+def _static(profile=None, flags=()):
+    def doc(name):
+        return files.select_sections(files.split_front_matter(files.gm_file(name))[1], profile, flags)
     parts = [
         HEADER,
-        "# DOCUMENT 1: PROTOCOL\n\n" + files.split_front_matter(files.gm_file("protocol.md"))[1],
-        "# DOCUMENT 2: ORACLES\n\n" + files.split_front_matter(files.gm_file("oracles.md"))[1],
-        "# DOCUMENT 3: STATE CONTRACT\n\n" + files.split_front_matter(files.gm_file("state_and_messages.md"))[1],
+        "# DOCUMENT 1: PROTOCOL\n\n" + doc("protocol.md"),
+        "# DOCUMENT 2: ORACLES\n\n" + doc("oracles.md"),
+        "# DOCUMENT 3: STATE CONTRACT\n\n" + doc("state_and_messages.md"),
     ]
     return "\n\n=====\n\n".join(parts)
 
 
-def ruleset_text(ruleset_id: str, rulesets=None) -> str:
+def ruleset_text(ruleset_id: str, rulesets=None, profile=None, flags=()) -> str:
     rs = (files.rulesets() if rulesets is None else rulesets).get(ruleset_id)
     if not rs:
         raise KeyError(f"unknown ruleset {ruleset_id}")
-    return rs["body"]
+    return files.select_sections(rs["body"], profile, flags)
+
+
+def flags_for(game: dict, adventure: dict | None, pictures_available: bool) -> tuple:
+    """What this game needs from the optional sections: `illustrations` (pictures are on and the server can draw them) and `generated`
+    (the adventure is not a supplied one, so the oracles that build adventures are useful)."""
+    flags = []
+    if pictures_available and (game.get("settings") or {}).get("illustrations") == "on":
+        flags.append("illustrations")
+    adv = adventure or {}
+    if (adv.get("generation") or "supplied") != "supplied" or adv.get("seed"):
+        flags.append("generated")
+    return tuple(sorted(flags))
 
 
 def adventure_text(adventure: dict) -> str:
@@ -41,8 +55,11 @@ def adventure_text(adventure: dict) -> str:
     return text
 
 
-def system_prompt(ruleset_id: str, adventure: dict | None, rulesets=None) -> str:
-    parts = [_static(), "# DOCUMENT 4: THE RULESET\n\n" + ruleset_text(ruleset_id, rulesets)]
+def system_prompt(ruleset_id: str, adventure: dict | None, rulesets=None, profile=None, flags=()) -> str:
+    """`profile` (turn, play or setup) and `flags` leave out the sections that request cannot need (TLR-03-010). With no profile the
+    prompt is complete. The static part is the same for every game with the same profile and flags, so it can be reused (TLR-03-011)."""
+    flags = tuple(flags)
+    parts = [_static(profile, flags), "# DOCUMENT 4: THE RULESET\n\n" + ruleset_text(ruleset_id, rulesets, profile, flags)]
     if adventure:
         head = "# DOCUMENT 5: THE ADVENTURE\n\n"
         if adventure.get("source") != "file":

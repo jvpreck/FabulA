@@ -230,6 +230,8 @@ def test_the_response_schema_accepts_a_good_answer_and_rejects_a_malformed_one()
                                "prompts": [{"id": "q", "type": "next", "text": "?", "options": []}]}]}}
     assert schema.check(good) == []
     assert schema.check({"status": "maybe"}) and schema.check({"results": {}})
+    assert schema.check(dict(good, validation=None, action=None)) == [], "the contract allows a null validation and action"
+    assert schema.check(dict(good, validation="x")), "but not a string"
     bad = dict(good, results={"c": {"kind": "own"}}, state_changes=[{"op": "explode", "entity": "game", "id": "g"}])
     problems = schema.check(bad)
     assert any("results.c" in p for p in problems) and any("explode" in p for p in problems)
