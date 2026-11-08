@@ -117,12 +117,11 @@ The server creates the game and sends you `game_created`. Ask through `prompts` 
 **Personal settings** (every player, stored in the character once it exists, or in `game.setup.answers` until then):
 
 6. **Language** of their results.
-7. **Stop signal.** Confirm that the player can send `pause` at any moment.
-8. **Fears.** Optionally one or two things their character would dread. These feed any distortion module. If a player declines, draw only from the story's own elements.
-9. **Sources of support** that the ruleset asks for, if any.
-10. **Standing orders.** What the character does when the player misses a tick. Offer the default: stay safe, rest, take no risks.
+7. **Fears.** Optionally one or two things their character would dread. These feed any distortion module. If a player declines, draw only from the story's own elements.
+8. **Sources of support** that the ruleset asks for, if any.
+9. **Standing orders.** What the character does when the player misses a tick. Offer the default: stay safe, rest, take no risks.
 
-Dice are always server dice, so there is no dice question.
+Dice are always server dice, so there is no dice question. The stop signal (`pause`) is always available (§3), so do not ask the player to confirm it.
 
 **Gating.** Setup ends when the host and every joined player have answered, or when `game.settings.setup_deadline` passes. After the deadline, apply defaults and say so in the facts. Confirm the final settings to each player in two or three plain sentences. Treat silence for one tick as a yes. New players may join during `setup` and `characters`. After `active` begins they join as late joiners (§4.5).
 
