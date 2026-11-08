@@ -8,7 +8,7 @@
 - **User-driven:** the players' choices drive the story; the AI Master keeps the secrets and the rules.
 - **Lore AI:** the AI Master (Google Gemini) holds the adventure's lore and runs the world.
 
-**New player? See [SETUP.md](SETUP.md)** for a step-by-step guide to connecting a Claude client and starting a first game.
+**New player? See [gm/setup_guide.md](gm/setup_guide.md)** for a step-by-step guide to connecting a Claude client and starting a first game.
 
 FabulA was previously named `multi-player-mcp-engine` (this repository was renamed; the old address redirects here).
 

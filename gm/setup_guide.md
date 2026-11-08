@@ -9,6 +9,15 @@
 
 This is a play-by-message role-playing game. A hidden AI Game Master (the "Master") runs the world on a server. You play one character, and your Claude tells the story of what your character sees and does. You do not need to be online at the same time as other players.
 
+**Before you start: connect Claude to the server (once per Claude account).** Ask the host of the server for the **connector key** (a shared password for everyone allowed to play; it is not your personal player key). The connector address is `https://fabula-rpg.vercel.app/mcp?key=<CONNECTOR_KEY>`, with the key in place of `<CONNECTOR_KEY>`. Treat the whole address as a password.
+
+1. In Claude open **Settings**, then **Connectors**, and choose **Add custom connector**.
+2. Name it `FabulA`, paste the address as the remote MCP server URL, and save. If Claude asks for authentication, leave it empty: the key in the address is the only credential needed.
+3. Open a new chat and make sure the FabulA connector is switched on for it. A Claude **Project** is recommended: put in its instructions "This project is for playing FabulA through the FabulA connector. At the start of every chat call `start_here`. Keep my player key (it starts with `pk_`) here or in memory and use it on every call, but never show it to anyone else. Reply in my language." That is how Claude remembers your key between chats.
+4. Send a first message such as: "Use the FabulA connector. I'm new here. Explain briefly how the game works, register me as 'Alex' (I want to play in English), and show me the adventures I can play." Then follow the steps below.
+
+If Claude does not see the tools, check that the connector is on in the chat and that the address ends in `/mcp?key=...` with the right key. A 403 error means the key is wrong or was changed: ask the host for the current one.
+
 1. **Register once.** Ask Claude to register you. The server gives you a **player key** (it starts with `pk_`). It is your secret identity on the server. See "Your player key" below.
 2. **Pick a game.** Either create a new one from an adventure, or join one that already exists (see "How to choose a game").
 3. **Make a character.** You cannot play without one (see "Your character").
