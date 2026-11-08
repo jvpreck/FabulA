@@ -136,6 +136,7 @@ Each game has a setting `illustrations` (`on` by default when the server can dra
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
    - `GEMINI_API_KEY`. Optional: `GEMINI_MODEL_TURN` (default `gemini-3.8-flash`), `GEMINI_MODEL_LIGHT` (default `gemini-3.5-flash-lite`; the old `GEMINI_MODEL` still works as its name), `GEMINI_THINKING_LEVEL` (default `medium`) and `GEMINI_THINKING_LEVEL_TURN`
    - Optional: `GEMINI_STRUCTURED_OUTPUT` (default `on`): Gemini is made to answer in the shape of the state contract (`server/schema.py`). If the provider refuses the schema the server stops sending it and says so in the call statistics. Set `off` to disable it
+   - Optional: `CHARACTER_CHECK_TIER` (`light` by default, or `turn`): which model cross-checks a character sheet while the player waits. `STRONG_BREAKER_SECONDS` (900; 0 turns it off): after the strong model times out or answers a server error, it is skipped for this long (by every server instance) and the light model answers at once; `gm_usage` shows `skipped_models`.
    - Optional quota guards, with headroom under the free tier: `GEMINI_TURN_RPD` (18) and `GEMINI_TURN_RPM` (4), `GEMINI_LIGHT_RPD` (450) and `GEMINI_LIGHT_RPM` (9)
    - `MCP_API_KEY`: the shared key for players (`Authorization: Bearer`, `x-api-key`, or `?key=` in the connector URL)
    - `CRON_SECRET`: for `/internal/resolve_turn`

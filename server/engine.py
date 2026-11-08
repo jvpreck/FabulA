@@ -227,7 +227,7 @@ class Engine:
         adventure = self._adventure(ws, game["adventure_id"])
         system = prompt.system_prompt(game["ruleset_id"], adventure, self.rulesets())
         # the strong model closes turns and checks character sheets; the light one handles single-player requests
-        tier = "turn" if mode == "resolve_turn" or (request or {}).get("kind") == "character_submission" else "light"
+        tier = "turn" if mode == "resolve_turn" else (config.CHARACTER_CHECK_TIER if (request or {}).get("kind") == "character_submission" else "light")
         turn0 = (game.get("clock") or {}).get("turn")
         errors = None
         scale = 1
@@ -285,7 +285,7 @@ class Engine:
             meta = dict(getattr(self.gm, "last_meta", None) or {})
             usage.record({"level": level, "tier": (getattr(self.gm, "last", None) or {}).get("tier") or tier, "mode": mode,
                           "kind": (request or {}).get("kind") or "-", "game_id": game_id, "outcome": outcome,
-                          "retries": int(meta.get("retries") or 0) + (1 if attempt else 0), **{k: meta.get(k) for k in (
+                          "retries": int(meta.get("retries") or 0) + (1 if attempt else 0), "breaker": meta.get("breaker"), **{k: meta.get(k) for k in (
                               "latency_ms", "tokens_in", "tokens_cached", "tokens_out", "tokens_thought")}})
         except Exception:
             pass
