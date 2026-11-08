@@ -153,6 +153,17 @@ class GeminiGM:
             self._client = genai.Client(api_key=self._api_key or os.environ["GEMINI_API_KEY"])
         return self._client
 
+    def _get_beta(self):
+        """A client for the provider's v1beta API. The SDK defaults to v1, which does not serve cached content (the first live run
+        got 404 on creating one); a request that refers to a cached copy must go to v1beta as well."""
+        if getattr(self, "_beta_client", None) is None:
+            import os
+            from google import genai
+            from google.genai import types
+            self._beta_client = genai.Client(api_key=self._api_key or os.environ["GEMINI_API_KEY"],
+                                             http_options=types.HttpOptions(api_version="v1beta"))
+        return self._beta_client
+
     def _generate(self, model, level, system, user):
         from google.genai import types
         name = self._cached(model, system)
@@ -170,7 +181,8 @@ class GeminiGM:
                 cfg["system_instruction"] = system
             if structured:  # TLR-03-015: the provider enforces the response's shape
                 cfg["response_json_schema"] = schema.RESPONSE_SCHEMA
-            return self._get().models.generate_content(model=model, contents=user, config=types.GenerateContentConfig(**cfg))
+            client = self._get_beta() if use_cache else self._get()
+            return client.models.generate_content(model=model, contents=user, config=types.GenerateContentConfig(**cfg))
 
         use_cache = name is not None
         while True:
@@ -237,7 +249,7 @@ class GeminiGM:
             return entry["name"]
         from google.genai import types
         try:
-            made = self._get().caches.create(model=model, config=types.CreateCachedContentConfig(
+            made = self._get_beta().caches.create(model=model, config=types.CreateCachedContentConfig(
                 system_instruction=system, ttl=f"{config.GEMINI_CACHE_TTL_SECONDS}s", display_name="fabula-" + key[:12]))
         except Exception as e:
             self._cache_off_until = now + (60 if self._transient(e) else config.CACHE_OFF_SECONDS)

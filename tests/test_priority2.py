@@ -153,6 +153,7 @@ BIG = "x" * (config.CACHE_MIN_CHARS + 10)
 def make_gm(monkeypatch, caches, models, store=None):
     gm = GeminiGM(usage=Usage(store or MemoryStore()))
     monkeypatch.setattr(gm, "_get", lambda: fake_client(caches, models))
+    monkeypatch.setattr(gm, "_get_beta", lambda: fake_client(caches, models))
     return gm
 
 

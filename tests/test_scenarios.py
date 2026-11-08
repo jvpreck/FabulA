@@ -146,7 +146,7 @@ def test_live_scenario(sc, monkeypatch):
           f"tokens in={gm.last_meta.get('tokens_in')} cached={gm.last_meta.get('tokens_cached')} out={gm.last_meta.get('tokens_out')}, "
           f"{gm.last_meta.get('latency_ms')} ms, schema off={bool(gm.last_meta.get('schema_disabled'))}")
     resp = parse(raw)
-    problems = run_checks(resp, json.loads(user), sc.get("live_secrets", ()) + sc.get("never_reaches_players", ()),
+    problems = run_checks(resp, json.loads(user), list(sc.get("live_secrets", ())) + list(sc.get("never_reaches_players", ())),
                           player_facing(eng, gid, cid, out))
     assert not any(problems.values()), json.dumps(problems, indent=2)
     assert schema.check(resp) == []
