@@ -231,8 +231,15 @@ class GeminiGM:
         if config.GEMINI_CONTEXT_CACHE == "off" or len(system) < config.CACHE_MIN_CHARS:
             return None
         now = time.time()
+        if now >= self._cache_off_until and self.usage is not None:  # another instance may already have been refused
+            try:
+                note = self.usage.store.get("usage", "cache:off")[0]
+                if note and note.get("until", 0) > now:
+                    self._cache_off_until, self._cache_off_note = note["until"], note.get("reason", "")
+            except Exception:
+                pass
         if now < self._cache_off_until:
-            self._meta["cache"] = "off"
+            self._meta.setdefault("cache", "off" + (": " + self._cache_off_note if getattr(self, "_cache_off_note", "") else ""))
             return None
         key = self._cache_key(model, system)
         entry = self._caches.get(key)
@@ -253,7 +260,14 @@ class GeminiGM:
                 system_instruction=system, ttl=f"{config.GEMINI_CACHE_TTL_SECONDS}s", display_name="fabula-" + key[:12]))
         except Exception as e:
             self._cache_off_until = now + (60 if self._transient(e) else config.CACHE_OFF_SECONDS)
-            self._meta["cache"] = "off: " + f"{type(e).__name__} {e}"[:120]
+            self._cache_off_note = f"{type(e).__name__} {e}"[:120]
+            self._meta["cache"] = "off: " + self._cache_off_note
+            if self.usage is not None and not self._transient(e):  # tell the other instances, so each does not ask again
+                try:
+                    doc, ver = self.usage.store.get("usage", "cache:off")
+                    self.usage.store.put("usage", "cache:off", {"id": "cache:off", "until": self._cache_off_until, "reason": self._cache_off_note}, ver)
+                except Exception:
+                    pass
             return None
         entry = {"name": made.name, "expires": now + config.GEMINI_CACHE_TTL_SECONDS}
         self._caches[key] = entry

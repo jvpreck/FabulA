@@ -195,7 +195,8 @@ def test_a_provider_that_refuses_caching_is_left_alone_for_a_while(monkeypatch):
     assert gm.last_meta["cache"].startswith("off") and sent[0].system_instruction == BIG and not sent[0].cached_content
     gm.call(BIG, "{}", tier="light")
     assert len(caches.created) == 1, "no second attempt within the waiting time"
-    gm._cache_off_until = 0
+    gm._cache_off_until = 0  # the waiting time has passed, here and in the note shared with the other instances
+    gm.usage.store.delete("usage", "cache:off")
     gm.call(BIG, "{}", tier="light")
     assert len(caches.created) == 2, "tried again after the waiting time"
 
@@ -298,3 +299,18 @@ def test_a_small_world_is_sent_whole():
     npcs, states, locs, lstates = world(3)
     out = Engine._narrow_world(me, {"kind": "action", "text": "x"}, {"events": []}, npcs, states, locs, lstates)
     assert out == (npcs, states, locs, lstates)
+
+
+def test_one_refusal_is_shared_with_the_other_server_instances_and_kept_through_a_retry(monkeypatch):
+    store, sent = MemoryStore(), []
+    refused = FakeCaches(outcome=Exception("429 RESOURCE_EXHAUSTED: TotalCachedContentStorageTokensPerModelFreeTier"))
+    first = make_gm(monkeypatch, refused, FakeModels(sent), store)
+    first.call(BIG, "{}", tier="light")
+    assert first.last_meta["cache"].startswith("off: ") and "FreeTier" in first.last_meta["cache"]
+    first._meta = {"cache": first.last_meta["cache"]}
+    first._cached("m", BIG)  # a retry of the same request in the same call
+    assert first._meta["cache"].startswith("off: "), "the reason is not overwritten"
+    other = make_gm(monkeypatch, refused, FakeModels(sent), store)
+    other.call(BIG, "{}", tier="light")
+    assert len(refused.created) == 1, "the second instance did not ask the provider again"
+    assert "FreeTier" in other.last_meta["cache"]
