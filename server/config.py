@@ -92,3 +92,8 @@ SAY_MAX_CHARS = 500
 REQUEST_RESULT_TTL_SECONDS = int(os.environ.get("REQUEST_RESULT_TTL_SECONDS", "3600"))  # how long a finished request's result can be served again
 REQUEST_CLAIM_SECONDS = int(os.environ.get("REQUEST_CLAIM_SECONDS", "300"))  # a claim older than this is a request that died (Vercel's limit is 300 s)
 REQUEST_KEEP = 5  # most remembered requests per player
+
+# The strong model times out or answers 5xx on large prompts. A player waiting for a character check must not wait for that, so the check
+# is made by the light model unless CHARACTER_CHECK_TIER=turn, and a strong model that has just failed is skipped for a while.
+CHARACTER_CHECK_TIER = "turn" if os.environ.get("CHARACTER_CHECK_TIER", "light").lower() == "turn" else "light"
+STRONG_BREAKER_SECONDS = int(os.environ.get("STRONG_BREAKER_SECONDS", "900"))  # 0 never skips the strong model
