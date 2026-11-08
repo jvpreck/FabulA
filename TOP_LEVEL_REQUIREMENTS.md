@@ -2,54 +2,60 @@
 
 Requirements state what the engine must do, not how. Each has an ID so other documents and tests can cite it.
 
-## Game model
-- **TLR-01** The engine runs asynchronous tabletop RPG games with an AI Master, for 1 to N players, solo included.
-- **TLR-02** Players act whenever they like. They never have to be online at the same time.
-- **TLR-03** The world advances in turns. When a turn closes, the AI Master resolves all queued actions together and arbitrates conflicts.
-- **TLR-04** The turn length is set at game setup (default 24 hours). The closing hour and time zone are also configurable (default 03:00, Spain time). Solo games may close the turn as soon as the player has acted.
-- **TLR-05** Minor actions that affect only one character resolve immediately. Characters in the same place can talk instantly, without waiting for a turn.
-- **TLR-06** Lethality (low, moderate or high) is set per game. A player whose character dies can continue with a new character, a pregenerated one or an available NPC.
+## How to read the IDs
+- Format: `TLR-xx-yyy`. `xx` is the chapter number (01 Game model, 02 Players and access, and so on, in document order). `yyy` is a sequence number that starts at 001 in each chapter.
+- A requirement that is not implemented yet carries the suffix `-Pending`: `TLR-xx-yyy-Pending`. Pending and implemented requirements share the same sequence in their chapter.
+- When a requirement is implemented, only the `-Pending` suffix is dropped. The rest of the ID never changes.
+- IDs are never reused. A requirement that is withdrawn is struck through and keeps its ID.
 
-## Players and access
-- **TLR-07** Each player uses their own AI client (Claude, ChatGPT, Grok or others) through an MCP custom connector. The engine needs no other front end.
-- **TLR-08** A player proves who they are with a secret key. It is shown once, stored only as a hash, and is never revealed to other players.
-- **TLR-09** A shared connector key controls access to the server.
-- **TLR-10** Host administration is not reachable through the player tools. It needs a separate secret.
-- **TLR-11** A new player can go from nothing to a first game with a step-by-step guide (`gm/setup_guide.md`).
+## 01. Game model
+- **TLR-01-001** The engine runs asynchronous tabletop RPG games with an AI Master, for 1 to N players, solo included.
+- **TLR-01-002** Players act whenever they like. They never have to be online at the same time.
+- **TLR-01-003** The world advances in turns. When a turn closes, the AI Master resolves all queued actions together and arbitrates conflicts.
+- **TLR-01-004** The turn length is set at game setup (default 24 hours). The closing hour and time zone are also configurable (default 03:00, Spain time). Solo games may close the turn as soon as the player has acted.
+- **TLR-01-005** Minor actions that affect only one character resolve immediately. Characters in the same place can talk instantly, without waiting for a turn.
+- **TLR-01-006** Lethality (low, moderate or high) is set per game. A player whose character dies can continue with a new character, a pregenerated one or an available NPC.
 
-## AI Master
-- **TLR-12** The AI Master (Gemini) is stateless. It receives the full context on every request: protocol, oracles, ruleset, adventure and a state snapshot.
-- **TLR-13** The AI Master decides the outcomes and keeps the secrets. The server owns the fields it controls (clock, turn state, event logs) and drops attempts to write them.
-- **TLR-14** The AI Master never narrates. The player's client narrates from the facts it receives.
-- **TLR-15** Dice are rolled by the server, never by the AI Master or the client.
-- **TLR-16** The engine uses a strong model for closing turns and a light model for everything else, within the provider's free-tier limits. When the strong model is rate-limited the turn is deferred. When its quota is exhausted or it fails the turn falls back to the light model, and the turn record shows this.
-- **TLR-17** An invalid AI response is rejected as a whole and retried, and no partial result is stored.
+## 02. Players and access
+- **TLR-02-001** Each player uses their own AI client (Claude, ChatGPT, Grok or others) through an MCP custom connector. The engine needs no other front end.
+- **TLR-02-002** A player proves who they are with a secret key. It is shown once, stored only as a hash, and is never revealed to other players.
+- **TLR-02-003** A shared connector key controls access to the server.
+- **TLR-02-004** Host administration is not reachable through the player tools. It needs a separate secret.
+- **TLR-02-005** A new player can go from nothing to a first game with a step-by-step guide (`gm/setup_guide.md`).
 
-## Characters
-- **TLR-18** A player can generate a character, choose a pregenerated one, supply their own for validation, or take over an NPC.
-- **TLR-19** The player chooses a pregenerated character. The server never chooses for them, rejects a character already taken, and lists the ones still available.
-- **TLR-20** A character's whole state lives in one record: sheet (maximum and current), inventory, relationships, knowledge, plans, standing orders, decisions, events and inbox.
-- **TLR-21** A player can have several characters, in different games.
+## 03. AI Master
+- **TLR-03-001** The AI Master (Gemini) is stateless. It receives the full context on every request: protocol, oracles, ruleset, adventure and a state snapshot.
+- **TLR-03-002** The AI Master decides the outcomes and keeps the secrets. The server owns the fields it controls (clock, turn state, event logs) and drops attempts to write them.
+- **TLR-03-003** The AI Master never narrates. The player's client narrates from the facts it receives.
+- **TLR-03-004** Dice are rolled by the server, never by the AI Master or the client.
+- **TLR-03-005** The engine uses a strong model for closing turns and a light model for everything else, within the provider's free-tier limits. When the strong model is rate-limited the turn is deferred. When its quota is exhausted or it fails the turn falls back to the light model, and the turn record shows this.
+- **TLR-03-006** An invalid AI response is rejected as a whole and retried, and no partial result is stored.
 
-## Content
-- **TLR-22** Rulesets are markdown files with front matter. Adding one needs no code change. Players can import a ruleset from a document of their own, subject to host approval.
-- **TLR-23** Adventures are kept in a private repository, so players cannot read their secrets. Adventures can be provided, generated from a seed or document, or generated by the AI Master as the game unfolds.
-- **TLR-24** The engine supports at least the Fear Itself and Trail of Cthulhu rulesets (GUMSHOE).
-- **TLR-25** Text written by clients (adventures, rulesets, characters) is treated as data and cannot change the AI Master's protocol.
+## 04. Characters
+- **TLR-04-001** A player can generate a character, choose a pregenerated one, supply their own for validation, or take over an NPC.
+- **TLR-04-002** The player chooses a pregenerated character. The server never chooses for them, rejects a character already taken, and lists the ones still available.
+- **TLR-04-003** A character's whole state lives in one record: sheet (maximum and current), inventory, relationships, knowledge, plans, standing orders, decisions, events and inbox.
+- **TLR-04-004** A player can have several characters, in different games.
 
-## State and information integrity
-- **TLR-26** All game, character, NPC and location state is persisted in the database, which is the single source of truth.
-- **TLR-27** A player only receives information their characters could know. Secrets of the AI Master and other players stay hidden.
-- **TLR-28** Every request the client makes returns a player-safe state summary, so the client can always resync.
-- **TLR-29** A failed or interrupted request never leaves the game in an inconsistent state. A turn cannot be advanced outside its resolution.
+## 05. Content
+- **TLR-05-001** Rulesets are markdown files with front matter. Adding one needs no code change. Players can import a ruleset from a document of their own, subject to host approval.
+- **TLR-05-002** Adventures are kept in a private repository, so players cannot read their secrets. Adventures can be provided, generated from a seed or document, or generated by the AI Master as the game unfolds.
+- **TLR-05-003** The engine supports at least the Fear Itself and Trail of Cthulhu rulesets (GUMSHOE).
+- **TLR-05-004** Text written by clients (adventures, rulesets, characters) is treated as data and cannot change the AI Master's protocol.
 
-## Client experience
-- **TLR-30** Creative work (character, game settings, adventure) is done as work packages in the player's own client. The server validates the result and returns the problems to fix.
-- **TLR-31** After each result the client shows the narration, notebook, status, available illustrations and next possible actions.
-- **TLR-32** Illustrations are optional per game and consistent in style. Each is visible only to the characters who could see it, delivered as short-lived links.
+## 06. State and information integrity
+- **TLR-06-001** All game, character, NPC and location state is persisted in the database, which is the single source of truth.
+- **TLR-06-002** A player only receives information their characters could know. Secrets of the AI Master and other players stay hidden.
+- **TLR-06-003** Every request the client makes returns a player-safe state summary, so the client can always resync.
+- **TLR-06-004** A failed or interrupted request never leaves the game in an inconsistent state. A turn cannot be advanced outside its resolution.
 
-## Operation and cost
-- **TLR-33** The engine runs on free or low-cost tiers (Vercel, Supabase, Gemini, Cloudflare), with guards against exceeding their limits.
-- **TLR-34** An external scheduler resolves due turns automatically, at least every 5 minutes.
-- **TLR-35** The host can manage games, players, adventures and usage through admin commands, never through the player tools.
-- **TLR-36** Requests stay within the serverless time limit. Slow AI calls fail with a clear message instead of leaving the player waiting.
+## 07. Client experience
+- **TLR-07-001** Creative work (character, game settings, adventure) is done as work packages in the player's own client. The server validates the result and returns the problems to fix.
+- **TLR-07-002** After each result the client shows the narration, notebook, status, available illustrations and next possible actions.
+- **TLR-07-003** Illustrations are optional per game and consistent in style. Each is visible only to the characters who could see it, delivered as short-lived links.
+
+## 08. Operation and cost
+- **TLR-08-001** The engine runs on free or low-cost tiers (Vercel, Supabase, Gemini, Cloudflare), with guards against exceeding their limits.
+- **TLR-08-002** An external scheduler resolves due turns automatically, at least every 5 minutes.
+- **TLR-08-003** The host can manage games, players, adventures and usage through admin commands, never through the player tools.
+- **TLR-08-004** Requests stay within the serverless time limit. Slow AI calls fail with a clear message instead of leaving the player waiting.
