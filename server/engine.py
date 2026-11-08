@@ -171,20 +171,36 @@ class Engine:
                       for t in g.get("turns", [])[-3:]]
         g["messages"] = g.get("messages", [])[-30:]
         g.get("setup", {}).pop("inbox", None)
+        relevant = self._relevant_only(game, mode, requester_cid)
+        if relevant:  # TLR-03-012: a request of one character needs that character's slice of the world, not all of it
+            me = next((c for c in chars if c["id"] == requester_cid), None)
+            self._narrow_game(g, me, requester_cid)
+            for v in out_chars:
+                if v.get("id") == requester_cid and (request or {}).get("kind") != "character_submission":
+                    v.pop("validation", None)  # the checks of the sheet, not needed once the character exists
+            if sa:
+                sa = {**sa, "actions": {k: v for k, v in (sa.get("actions") or {}).items() if k == requester_cid}}  # the others are in `characters`
         players = []
         for r in game.get("roster", []):
             p = ws.get("player", r["player_id"])
             if p:
                 players.append({"id": p["id"], "display_name": p.get("display_name"), "language": p.get("language")})
         npc_states = ws.find("npc_state", game_id=gid)
+        npcs = ws.find("npc", game_id=gid) + ws.find("npc", adventure_id=adventure["id"])
+        locations = ws.find("location", game_id=gid) + ws.find("location", adventure_id=adventure["id"])
+        location_states = ws.find("location_state", game_id=gid)
+        if relevant:
+            me = next((c for c in chars if c["id"] == requester_cid), None)
+            npcs, npc_states, locations, location_states = self._narrow_world(
+                me, request, g, npcs, npc_states, locations, location_states)
         env = {
             "mode": mode, "now": iso(self.now()), "game": g,
             "adventure": {k: v for k, v in adventure.items() if k not in ("content", "seed")} | (
                 {"stored_in_prompt": True}),
-            "characters": out_chars, "npcs": ws.find("npc", game_id=gid) + ws.find("npc", adventure_id=adventure["id"]),
+            "characters": out_chars, "npcs": npcs,
             "npc_states": npc_states,
-            "locations": ws.find("location", game_id=gid) + ws.find("location", adventure_id=adventure["id"]),
-            "location_states": ws.find("location_state", game_id=gid),
+            "locations": locations,
+            "location_states": location_states,
             "submit_action": sa, "players": players,
             "dice": make_dice(60 * dice_scale, 30 * dice_scale, 30 * dice_scale) if mode != "resolve_turn" else
             make_dice((40 + 30 * len(chars)) * dice_scale, 30 * dice_scale, 30 * dice_scale),
@@ -204,6 +220,54 @@ class Engine:
         if previous_errors:
             env["previous_errors"] = previous_errors
         return env
+
+    @staticmethod
+    def _relevant_only(game, mode, requester_cid):
+        """Only a request in a running game, from a character, is narrowed. The turn close and game setup see everything."""
+        return bool(config.ENVELOPE_RELEVANT and mode != "resolve_turn" and game["phase"] == "active" and requester_cid)
+
+    @staticmethod
+    def _narrow_game(g, me, cid):
+        """Events and messages that concern this character (took part, witnessed, happened where they are, or are public), and the
+        results of earlier turns that were this character's own."""
+        loc = ((me or {}).get("location") or {}).get("id")
+        g["events"] = [e for e in g.get("events", []) if cid in (e.get("participants") or []) or cid in (e.get("witnesses") or [])
+                       or (loc and e.get("location_id") == loc) or e.get("visibility") == "all"][-30:]
+        g["messages"] = [m for m in g.get("messages", []) if cid in (m.get("from"), m.get("to"))][-30:]
+        for t in g.get("turns", []):
+            if isinstance(t.get("results"), dict):
+                t["results"] = {k: v for k, v in t["results"].items() if k == cid}
+
+    @staticmethod
+    def _narrow_world(me, request, g, npcs, npc_states, locations, location_states):
+        """NPCs and places the request can involve: where the character is, whom or what they have met or know, and anything named in
+        the request or in the events that concern them. A small world is sent whole: narrowing only pays when it is large."""
+        import json as _json
+        if len(_json.dumps([npcs, npc_states, locations, location_states], ensure_ascii=False)) <= config.ENVELOPE_WORLD_NARROW_CHARS:
+            return npcs, npc_states, locations, location_states
+        cid = (me or {}).get("id")
+        loc = ((me or {}).get("location") or {}).get("id")
+        text = _json.dumps([(request or {}).get("text"), (request or {}).get("payload"), g.get("events"), (me or {}).get("knowledge"),
+                            (me or {}).get("relationships"), (me or {}).get("events")], ensure_ascii=False).lower()
+
+        def named(*ids_and_names):
+            return any(x and str(x).lower() in text for x in ids_and_names)
+
+        keep_npc = set()
+        for ns in npc_states:
+            nid = ns.get("npc_id")
+            d = next((n for n in npcs if n.get("id") == nid), {})
+            if (loc and ns.get("location_id") == loc) or cid in (ns.get("met_by") or []) or ns.get("controlled_by_character_id") == cid \
+                    or named(nid, d.get("name")):
+                keep_npc.add(nid)
+        keep_loc = {loc} if loc else set()
+        for ls in location_states:
+            lid = ls.get("location_id")
+            d = next((x for x in locations if x.get("id") == lid), {})
+            if cid in (ls.get("visited_by") or []) or named(lid, d.get("name")):
+                keep_loc.add(lid)
+        return ([n for n in npcs if n.get("id") in keep_npc], [s for s in npc_states if s.get("npc_id") in keep_npc],
+                [x for x in locations if x.get("id") in keep_loc], [s for s in location_states if s.get("location_id") in keep_loc])
 
     def _illustration_brief(self, ws, game, chars):
         """For a game with pictures on: tell the AI Master what the protocol (5.6) expects this turn. One picture of the turn, and one for each
@@ -225,7 +289,9 @@ class Engine:
     def _run(self, ws, game_id, mode, request, requester_cid=None, post=None, store_in_turn=False):
         game = self._game(ws, game_id)
         adventure = self._adventure(ws, game["adventure_id"])
-        system = prompt.system_prompt(game["ruleset_id"], adventure, self.rulesets())
+        profile = self._profile(mode, request)
+        system = prompt.system_prompt(game["ruleset_id"], adventure, self.rulesets(), profile,
+                                      prompt.flags_for(game, adventure, self._images_available()) if profile else ())
         # the strong model closes turns and checks character sheets; the light one handles single-player requests
         tier = "turn" if mode == "resolve_turn" or (request or {}).get("kind") == "character_submission" else "light"
         turn0 = (game.get("clock") or {}).get("turn")
@@ -276,6 +342,18 @@ class Engine:
                 self._log_call(game_id, level, tier, mode, request, outcome, tries)
         raise EngineError(f"the GM response was rejected {tries} times: {errors}")
 
+    SETUP_KINDS = {"game_created", "join", "setup_answers", "character_submission", "character_confirm"}
+
+    @classmethod
+    def _profile(cls, mode, request):
+        """Which sections of the instructions this request needs (TLR-03-010): the turn close, game setup (creating the game, joining,
+        characters) or ordinary play. None sends everything (PROMPT_SLIM=off)."""
+        if not config.PROMPT_SLIM:
+            return None
+        if mode == "resolve_turn":
+            return "turn"
+        return "setup" if (request or {}).get("kind") in cls.SETUP_KINDS else "play"
+
     def _log_call(self, game_id, level, tier, mode, request, outcome, attempt):
         """TLR-08-006: one line in the day's statistics for every AI Master call. It never blocks or fails a request."""
         try:
@@ -285,7 +363,7 @@ class Engine:
             meta = dict(getattr(self.gm, "last_meta", None) or {})
             usage.record({"level": level, "tier": (getattr(self.gm, "last", None) or {}).get("tier") or tier, "mode": mode,
                           "kind": (request or {}).get("kind") or "-", "game_id": game_id, "outcome": outcome,
-                          "retries": int(meta.get("retries") or 0) + (1 if attempt else 0), **{k: meta.get(k) for k in (
+                          "retries": int(meta.get("retries") or 0) + (1 if attempt else 0), "cache": meta.get("cache"), **{k: meta.get(k) for k in (
                               "latency_ms", "tokens_in", "tokens_cached", "tokens_out", "tokens_thought")}})
         except Exception:
             pass

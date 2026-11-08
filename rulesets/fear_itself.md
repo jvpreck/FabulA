@@ -70,6 +70,7 @@ summary: Horror about ordinary people. Grounded and realistic by default; an adv
 - **Means [House]:** state money, transport and contacts narratively. Anything else is produced with a Preparedness test.
 
 ### 2.1 Character intake and validation [House]
+<!-- for: setup -->
 
 A character reaches the game by one of three routes: **generated** with the AI Master (quick creation above), **pregenerated** (§2.2), or **provided** by the player in any format. Whatever the route, produce the canonical character record (state contract §3.5) and run this checklist. Report every line in the `validation` block.
 

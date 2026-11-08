@@ -444,6 +444,7 @@ The envelope's `mode` is one of:
 | `resolve_turn` | The turn closes. Resolve everything queued and let the world move. |
 
 ### 4.2 Request kinds (`intake`)
+<!-- for: setup, play -->
 
 The `request` object:
 
@@ -704,6 +705,7 @@ Guidelines:
 ---
 
 ### 6.7 Illustrations
+<!-- for: turn; needs: illustrations -->
 
 When `game.settings.illustrations` is `"on"`, you may add `illustrations` to a `resolve_turn` response (the envelope carries `illustration_brief`: `turn_picture`, `max_pictures` and `locations_without_picture`, each `{ "location_id", "name", "characters_there" }`), each entry `{ "prompt": "…", "caption": "…", "visible_to": ["c_iris"] }`:
 

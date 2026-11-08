@@ -92,3 +92,17 @@ SAY_MAX_CHARS = 500
 REQUEST_RESULT_TTL_SECONDS = int(os.environ.get("REQUEST_RESULT_TTL_SECONDS", "3600"))  # how long a finished request's result can be served again
 REQUEST_CLAIM_SECONDS = int(os.environ.get("REQUEST_CLAIM_SECONDS", "300"))  # a claim older than this is a request that died (Vercel's limit is 300 s)
 REQUEST_KEEP = 5  # most remembered requests per player
+
+# The AI Master's instructions are sent in sections chosen by the kind of request (TLR-03-010, TLR-05-007). "off" sends everything, as before.
+PROMPT_SLIM = os.environ.get("PROMPT_SLIM", "on").lower() not in ("off", "0", "false", "no")
+
+# Provider-side caching of the AI Master's instructions (TLR-03-011). "auto" tries it and falls back when the provider refuses; "off" never tries.
+GEMINI_CONTEXT_CACHE = os.environ.get("GEMINI_CONTEXT_CACHE", "auto").lower()
+GEMINI_CACHE_TTL_SECONDS = int(os.environ.get("GEMINI_CACHE_TTL_SECONDS", "3600"))  # how long a copy lives at the provider
+CACHE_REFRESH_SECONDS = 600  # a copy with less than this left is replaced by a new one
+CACHE_OFF_SECONDS = int(os.environ.get("CACHE_OFF_SECONDS", "3600"))  # after the provider refuses, wait this long before trying again
+CACHE_MIN_CHARS = int(os.environ.get("CACHE_MIN_CHARS", "20000"))  # shorter instructions are not worth a copy (the provider needs about 4,000 tokens)
+
+# What a request of one character is told about the world (TLR-03-012). "off" sends the whole world, as before.
+ENVELOPE_RELEVANT = os.environ.get("ENVELOPE_RELEVANT", "on").lower() not in ("off", "0", "false", "no")
+ENVELOPE_WORLD_NARROW_CHARS = int(os.environ.get("ENVELOPE_WORLD_NARROW_CHARS", "12000"))  # a world smaller than this is sent whole
