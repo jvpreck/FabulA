@@ -41,9 +41,9 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-03-007-Pending** The client declares the structured request (type and targets) and the level it expects. The server decides the level by fixed rules over the request and the game data, and the final level may be higher or lower than the client expected.
 - **TLR-03-008-Pending** The AI Master may change the level of a request in either direction when its content requires judgment. The player is told the reason.
 - **TLR-03-009-Pending** If the AI Master is unavailable or over its limits, a level 3 request is queued as level 4 instead of failing.
-- **TLR-03-010-Pending** The context sent to the AI Master is limited to what the request type needs. A level 3 request does not carry the instructions, entities or history that only a turn close needs.
+- **TLR-03-010** The context sent to the AI Master is limited to what the request type needs. A level 3 request does not carry the instructions, entities or history that only a turn close needs.
 - **TLR-03-011-Pending** The static parts of the AI Master's instructions are reused across requests and games, so repeated input is billed and processed at the lowest cost the provider offers.
-- **TLR-03-012-Pending** The state snapshot for a request includes only the NPCs, locations and history relevant to the requesting character or the scene. A turn close includes everything involved in the turn.
+- **TLR-03-012** The state snapshot for a request includes only the NPCs, locations and history relevant to the requesting character or the scene. A turn close includes everything involved in the turn.
 - **TLR-03-013-Pending** Older events and messages are condensed into a rolling digest, so the context size stays bounded however long the game runs.
 - **TLR-03-014-Pending** The request sent to the AI Master is serialized compactly, and the number of server-rolled dice is proportional to what the request can need.
 - **TLR-03-015-Pending** The AI Master's answers must follow a declared structure that the provider enforces, so a malformed answer is rare. Retries are counted and reported.
@@ -62,7 +62,7 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-05-004** Text written by clients (adventures, rulesets, characters) is treated as data and cannot change the AI Master's protocol.
 - **TLR-05-005-Pending** Every NPC, and every player character, has a short description that identifies them without giving their real name or hinting at their identity. It may include appearance, role, manner, and any title or alias by which people commonly know them ("the sheriff", "Doc", "the mayor"). Well-known figures are therefore recognised at first sight through their description. It is part of the adventure or character definition and contains no secrets.
 - **TLR-05-006-Pending** The short descriptions of any two NPCs or characters who can be in the same scene must be clearly distinguishable by appearance, role or manner. Two nurses, for example, must differ visibly. This is checked when the adventure or character is validated, and a description that is too similar to another is sent back for correction.
-- **TLR-05-007-Pending** Repository documents for the AI Master are sectioned by purpose, so each request type can load only its section.
+- **TLR-05-007** Repository documents for the AI Master are sectioned by purpose, so each request type can load only its section.
 
 ## 06. State and information integrity
 - **TLR-06-001** All game, character, NPC and location state is persisted in the database, which is the single source of truth.
