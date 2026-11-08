@@ -149,7 +149,9 @@ def test_live_scenario(sc, monkeypatch):
         out = eng.submit_action(PLAYER, gid, sc["request"]["kind"], sc["request"]["text"], cid)
     user, raw, system, tier = gm.recorded
     print(f"\n[{sc['name']}] tier={tier} instructions={len(system)} characters, cache={gm.last_meta.get('cache')}, "
-          f"tokens in={gm.last_meta.get('tokens_in')} cached={gm.last_meta.get('tokens_cached')} out={gm.last_meta.get('tokens_out')}, "
+          f"model={gm.last.get('model')} degraded={gm.last.get('degraded')}, "
+          f"tokens in={gm.last_meta.get('tokens_in')} cached={gm.last_meta.get('tokens_cached')} out={gm.last_meta.get('tokens_out')} "
+          f"thinking={gm.last_meta.get('tokens_thought')} retries={gm.last_meta.get('retries')}, "
           f"{gm.last_meta.get('latency_ms')} ms, schema off={bool(gm.last_meta.get('schema_disabled'))}")
     resp = parse(raw)
     problems = run_checks(resp, json.loads(user), list(sc.get("live_secrets", ())) + list(sc.get("never_reaches_players", ())),
