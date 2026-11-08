@@ -73,7 +73,7 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-06-006-Pending** Which names a character knows is stored per character, not per player. A name learned by one character is not known by another, including another character of the same player.
 - **TLR-06-007-Pending** The AI Master refers to people by id. The server decides, for each receiving character, whether to show the real name or the short description, and it never sends a name the character does not know yet. This does not depend on the Master or the client remembering the rule.
 - **TLR-06-008-Pending** When a character learns a name, the change is recorded as an event in that character's knowledge, and the name can be used from the next result onward.
-- **TLR-06-009-Pending** Saving the result of a request or a turn is atomic: all the records change together or none do, even if the server stops partway through.
+- **TLR-06-009** Saving the result of a request or a turn is atomic: all the records change together or none do, even if the server stops partway through.
 - **TLR-06-010** The same request submitted twice (a client retry, a double click) has the effect of one request.
 
 ## 07. Client experience
