@@ -247,6 +247,7 @@ def _fake_models(sent, refuse_schema):
 
 
 def test_gemini_is_asked_for_the_schema_and_stops_asking_if_it_is_refused(monkeypatch):
+    monkeypatch.setattr(config, "GEMINI_STRUCTURED_OUTPUT", True)
     sent = []
     gm = GeminiGM(usage=None)
     monkeypatch.setattr(gm, "_get", lambda: _fake_models(sent, True))
@@ -264,3 +265,8 @@ def test_structured_output_can_be_switched_off(monkeypatch):
     monkeypatch.setattr(gm, "_get", lambda: _fake_models(sent, False))
     gm.call("s", "{}", tier="light")
     assert sent == [None]
+
+
+def test_structured_output_is_off_by_default():
+    """The schema in server/schema.py leaves the objects of the contract empty (see its docstring): it must not be sent unless asked for."""
+    assert config.GEMINI_STRUCTURED_OUTPUT is False and GeminiGM(usage=None)._structured is False

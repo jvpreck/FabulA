@@ -46,7 +46,7 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-03-012-Pending** The state snapshot for a request includes only the NPCs, locations and history relevant to the requesting character or the scene. A turn close includes everything involved in the turn.
 - **TLR-03-013-Pending** Older events and messages are condensed into a rolling digest, so the context size stays bounded however long the game runs.
 - **TLR-03-014-Pending** The request sent to the AI Master is serialized compactly, and the number of server-rolled dice is proportional to what the request can need.
-- **TLR-03-015** The AI Master's answers must follow a declared structure that the provider enforces, so a malformed answer is rare. Retries are counted and reported.
+- **TLR-03-015-Pending** The AI Master's answers must follow a declared structure that the provider enforces, so a malformed answer is rare. Retries are counted and reported.
 - **TLR-03-016** Changes to the AI Master's instructions are checked against a set of recorded scenarios before release. The checks cover valid structure, secrecy (nothing hidden reaches a player) and rules fidelity.
 
 ## 04. Characters
