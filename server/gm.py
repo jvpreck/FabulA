@@ -2,7 +2,7 @@
 import json
 import re
 
-from . import config
+from . import config, schema
 
 
 class GMError(Exception):
@@ -69,6 +69,50 @@ class Usage:
             self.sleep(2)
             waited += 2
 
+    # ---- call statistics (TLR-08-006): what every AI Master call cost, by level, tier, request type and game
+    STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries",
+                   "tokens_in", "tokens_cached", "tokens_out", "tokens_thought", "latency_ms")
+
+    def record(self, entry):
+        """Adds one AI Master call to the day's statistics. `entry` has level, tier, mode, kind, game_id, outcome, retries, latency_ms and
+        token counts (missing counts are 0). Bookkeeping never blocks play: after a few conflicts the entry is dropped."""
+        from .db import Conflict
+        for _ in range(4):
+            now = self.now_fn()
+            day = self._day(now)
+            key = f"stats:{day}"
+            doc, ver = self.store.get("usage", key)
+            doc = doc or {"id": key, "day": day, "by": {}, "games": {}}
+            label = "|".join(str(entry.get(k) or "-") for k in ("level", "tier", "mode", "kind"))
+            for bucket in (doc["by"].setdefault(label, {}), doc["games"].setdefault(entry.get("game_id") or "-", {})):
+                for f in self.STAT_FIELDS:
+                    bucket.setdefault(f, 0)
+                bucket["calls"] += 1
+                outcome = entry.get("outcome", "ok")
+                if outcome in bucket:
+                    bucket[outcome] += 1
+                bucket["retries"] += int(entry.get("retries") or 0)
+                bucket["latency_ms"] += int(entry.get("latency_ms") or 0)
+                for f in ("tokens_in", "tokens_cached", "tokens_out", "tokens_thought"):
+                    bucket[f] += int(entry.get(f) or 0)
+            try:
+                self.store.put("usage", key, doc, ver)
+                return True
+            except Conflict:
+                continue
+        return False
+
+    def stats(self, day=None):
+        """The day's call statistics (default today), with the share of input served from the provider's cache per level."""
+        day = day or self._day(self.now_fn())
+        doc = self.store.get("usage", f"stats:{day}")[0] or {"day": day, "by": {}, "games": {}}
+        by = {}
+        for label, b in doc["by"].items():
+            row = dict(b)
+            row["cached_share"] = round(b["tokens_cached"] / b["tokens_in"], 3) if b.get("tokens_in") else 0
+            by[label] = row
+        return {"day": day, "by_level_tier_mode_kind": by, "by_game": doc["games"]}
+
     def today(self):
         out = {}
         for tier in config.GEMINI_LIMITS:
@@ -91,6 +135,8 @@ class GeminiGM:
         self._api_key = api_key
         self.usage = usage
         self.last = {}
+        self._meta = {}  # token counts and retries of the call in progress
+        self._structured = config.GEMINI_STRUCTURED_OUTPUT
         self._sleep = sleep or __import__("time").sleep
 
     def _get(self):
@@ -102,13 +148,34 @@ class GeminiGM:
 
     def _generate(self, model, level, system, user):
         from google.genai import types
-        cfg = types.GenerateContentConfig(
+        cfg = dict(
             system_instruction=system,
             response_mime_type="application/json",
             thinking_config=types.ThinkingConfig(thinking_level=level),
             http_options=types.HttpOptions(timeout=config.GEMINI_TIMEOUT_SECONDS * 1000),
         )
-        return self._get().models.generate_content(model=model, contents=user, config=cfg).text or ""
+        if self._structured:  # TLR-03-015: the provider enforces the response's shape
+            cfg["response_json_schema"] = schema.RESPONSE_SCHEMA
+        try:
+            resp = self._get().models.generate_content(model=model, contents=user, config=types.GenerateContentConfig(**cfg))
+        except Exception as e:
+            if self._structured and self._schema_rejected(e):  # the provider does not accept the schema: play on without it, and say so
+                self._structured = False
+                self._meta["schema_disabled"] = str(e)[:200]
+                cfg.pop("response_json_schema", None)
+                resp = self._get().models.generate_content(model=model, contents=user, config=types.GenerateContentConfig(**cfg))
+            else:
+                raise
+        um = getattr(resp, "usage_metadata", None)
+        if um is not None:
+            self._meta.update(tokens_in=getattr(um, "prompt_token_count", 0) or 0, tokens_cached=getattr(um, "cached_content_token_count", 0) or 0,
+                              tokens_out=getattr(um, "candidates_token_count", 0) or 0, tokens_thought=getattr(um, "thoughts_token_count", 0) or 0)
+        return resp.text or ""
+
+    @staticmethod
+    def _schema_rejected(e):
+        m = f"{type(e).__name__} {e}".lower()
+        return ("400" in m or "invalid_argument" in m or "invalid argument" in m) and ("schema" in m or "response_json" in m)
 
     @staticmethod
     def _retryable(e):
@@ -151,6 +218,18 @@ class GeminiGM:
                 attempt += 1
 
     def call(self, system: str, user: str, tier: str = "light") -> str:
+        import time
+        self._meta = {}
+        t0 = time.monotonic()
+        try:
+            return self._call(system, user, tier)
+        finally:
+            self._meta["latency_ms"] = int((time.monotonic() - t0) * 1000)
+            self.last_meta = dict(self._meta)
+
+    last_meta = {}
+
+    def _call(self, system: str, user: str, tier: str = "light") -> str:
         degraded = None
         if tier == "turn":
             r = self.usage.reserve("turn") if self.usage else "ok"

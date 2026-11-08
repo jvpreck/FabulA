@@ -159,14 +159,16 @@ def register(mcp, engine: Engine):
     @mcp.tool()
     @_safe
     def submit_action(player_key: str, game_id: str, kind: str, text: str = "", character_id: str = "",
-                      payload: dict | None = None) -> dict:
+                      payload: dict | None = None, request_id: str = "") -> dict:
         """Send anything the character does or the player decides. kind is one of: action (what the character wants to do, free text),
         say (speak to a character in the same place; payload {to, whisper}), setup_answers (payload {answers}),
         character_submission, character_confirm (payload {approved}), standing_orders (payload {standing_orders, safety}),
         thread_note (payload {type, text}), message (payload {to, channel, text}), decision (payload {prompt_id, choice}),
         free_query, pause, resume (payload {choice}). Minor actions that affect only your character are resolved at once;
-        the rest wait for the turn. Returns the results now available to you."""
-        return engine.submit_action(engine.authenticate(player_key), game_id, kind, text, character_id or None, payload)
+        the rest wait for the turn. Returns the results now available to you.
+        request_id: a fresh unique id (for example a short random string) for each new request, sent again unchanged if you must retry after
+        a timeout or an error you did not see the answer to. The same request_id is processed once; the retry returns the first answer."""
+        return engine.submit_action(engine.authenticate(player_key), game_id, kind, text, character_id or None, payload, request_id)
 
     @mcp.tool()
     @_safe

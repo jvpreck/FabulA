@@ -1,0 +1,133 @@
+{
+  "README": [
+    "Recorded scenarios for the AI Master (TLR-03-016). Each one is a request and the AI Master's answer to it.",
+    "Offline (every test run) the recorded answer is played back through the engine and checked. With FABULA_LIVE_SCENARIOS=1 and GEMINI_API_KEY",
+    "the scenarios marked live are sent to the real model instead, with the current instructions, and the same checks run on its answer.",
+    "Tokens: $GID $CID $PID $TURN are replaced by the game's ids; $D6[n] $D10[n] $D20[n] by the n-th server die of that kind in the envelope.",
+    "expect_engine: accepts | rejects.  expect_failures: the check groups (structure, dice, secrecy) that MUST find a problem (default none).",
+    "never_reaches_players: strings that must not appear anywhere in what the players receive.",
+    "live_secrets: strings added to the adventure's GM-only part for the live run; the answer must not leak them (live scenarios only)."
+  ],
+  "scenarios": [
+    {
+      "name": "free_query_is_answered",
+      "request": {"kind": "free_query", "text": "What do I know about this place?"},
+      "recorded": {
+        "status": "ok", "handling": "answered",
+        "results": {"$CID": [{"kind": "own", "language": "en",
+          "facts": [{"block": null, "kind": "scene", "text": "You know only what you have seen: an old mill, quiet in the afternoon light."}],
+          "prompts": [{"id": "q", "type": "next", "text": "What now?", "options": []}],
+          "narration_hints": {"mood": "calm", "pace": "slow", "senses": [], "do_not": []}}]},
+        "state_changes": [], "events": [], "decisions": [], "messages": [], "shared_digest": [], "dice_log": [], "errors": []
+      },
+      "expect_engine": "accepts",
+      "live": true,
+      "live_secrets": ["ARSENIC-IN-THE-WELL"],
+      "live_adventure_extra": "The miller poisoned the well with ARSENIC-IN-THE-WELL. No clue to this is within the character's reach yet."
+    },
+    {
+      "name": "major_action_is_queued_for_the_turn",
+      "request": {"kind": "action", "text": "I ask the miller about the missing foreman and follow him if he leaves."},
+      "recorded": {
+        "status": "ok", "handling": "queued",
+        "action": {"parsed": {"blocks": [{"block": "Afternoon", "intent": "interview the miller, follow if he leaves"}]}},
+        "results": {"$CID": [{"kind": "own", "language": "en",
+          "facts": [{"block": null, "kind": "system", "text": "Noted. The world answers at the turn."}],
+          "prompts": [{"id": "q", "type": "next", "text": "Anything else before the turn?", "options": []}],
+          "narration_hints": {"mood": "", "pace": "", "senses": [], "do_not": []}}]},
+        "state_changes": [], "events": [], "decisions": [], "messages": [], "shared_digest": [], "dice_log": [], "errors": []
+      },
+      "expect_engine": "accepts"
+    },
+    {
+      "name": "minor_action_uses_server_dice_in_order",
+      "request": {"kind": "action", "text": "I search the desk in the mill office."},
+      "recorded": {
+        "status": "ok", "handling": "autonomous",
+        "action": {"parsed": {"blocks": [{"block": "Morning", "intent": "search the desk"}]}},
+        "results": {"$CID": [{"kind": "own", "language": "en",
+          "facts": [{"block": "Morning", "kind": "result", "text": "You go through the drawers and find a ledger with several torn pages."}],
+          "roll_report": [{"block": "Morning", "ability": "Search", "type": "test", "spend": 0, "die": "d6", "value": "$D6[0]", "outcome": "success", "note": "found the ledger"}],
+          "prompts": [{"id": "q", "type": "next", "text": "What now?", "options": []}],
+          "narration_hints": {"mood": "tense", "pace": "slow", "senses": [], "do_not": []}}]},
+        "state_changes": [{"op": "append", "entity": "character", "id": "$CID", "path": "turn_state.blocks_used", "doc": "Morning"}],
+        "events": [], "decisions": [], "messages": [], "shared_digest": [],
+        "dice_log": [{"die": "d6", "value": "$D6[0]", "for": "$CID Morning Search"}],
+        "errors": []
+      },
+      "expect_engine": "accepts"
+    },
+    {
+      "name": "gm_only_fields_never_reach_the_players",
+      "request": {"kind": "action", "text": "I search the cellar stairs."},
+      "recorded": {
+        "status": "ok", "handling": "autonomous",
+        "action": {"parsed": {"blocks": [{"block": "Morning", "intent": "search the cellar stairs"}]}},
+        "results": {"$CID": [{"kind": "own", "language": "en",
+          "facts": [{"block": "Morning", "kind": "result", "text": "The stairs are old and bare. Nothing here."}],
+          "prompts": [{"id": "q", "type": "next", "text": "What now?", "options": []}],
+          "narration_hints": {"mood": "", "pace": "", "senses": [], "do_not": []}}]},
+        "state_changes": [{"op": "append", "entity": "character", "id": "$CID", "path": "turn_state.blocks_used", "doc": "Morning"}],
+        "events": [{"id": "ev_s1", "turn": "$TURN", "day": 1, "block": "Morning", "location_id": "loc_tolland_house",
+                    "summary": "GM view: GM-ONLY-MARKER-1 the foreman's body is behind the false wall.",
+                    "participants": ["$CID"], "witnesses": [],
+                    "character_summaries": {"$CID": "You searched the cellar stairs and found nothing."},
+                    "visibility": "gm", "tags": []}],
+        "decisions": [], "messages": [], "shared_digest": [], "dice_log": [],
+        "gm_notes": "GM-ONLY-MARKER-2 plan: the cellar clue comes at the turn.",
+        "errors": []
+      },
+      "never_reaches_players": ["GM-ONLY-MARKER-1", "GM-ONLY-MARKER-2", "false wall"],
+      "expect_engine": "accepts"
+    },
+    {
+      "name": "BAD_invented_dice_are_detected",
+      "request": {"kind": "action", "text": "I force the lock."},
+      "recorded": {
+        "status": "ok", "handling": "autonomous",
+        "action": {"parsed": {"blocks": [{"block": "Morning", "intent": "force the lock"}]}},
+        "results": {"$CID": [{"kind": "own", "language": "en",
+          "facts": [{"block": "Morning", "kind": "result", "text": "The lock gives way."}],
+          "roll_report": [{"block": "Morning", "ability": "Athletics", "type": "test", "spend": 0, "die": "d6", "value": 6, "outcome": "success", "note": ""}],
+          "prompts": [{"id": "q", "type": "next", "text": "What now?", "options": []}],
+          "narration_hints": {"mood": "", "pace": "", "senses": [], "do_not": []}}]},
+        "state_changes": [{"op": "append", "entity": "character", "id": "$CID", "path": "turn_state.blocks_used", "doc": "Morning"}],
+        "events": [], "decisions": [], "messages": [], "shared_digest": [],
+        "dice_log": [{"die": "d6", "value": "$D6[1]", "for": "skipped the first die and chose a convenient one"}],
+        "errors": []
+      },
+      "expect_engine": "accepts",
+      "expect_failures": ["dice"]
+    },
+    {
+      "name": "BAD_malformed_answer_is_detected",
+      "request": {"kind": "free_query", "text": "Where am I?"},
+      "recorded": {
+        "status": "ok", "handling": "maybe",
+        "results": {"$CID": {"kind": "own", "facts": "You are in a mill."}},
+        "state_changes": [{"op": "explode", "entity": "game", "id": "$GID"}],
+        "events": [], "decisions": [], "messages": [], "shared_digest": [], "dice_log": [], "errors": []
+      },
+      "expect_engine": "rejects",
+      "expect_failures": ["structure"]
+    },
+    {
+      "name": "BAD_death_in_a_low_lethality_game_is_rejected",
+      "lethality": "low",
+      "request": {"kind": "action", "text": "I jump from the mill's loft."},
+      "recorded": {
+        "status": "ok", "handling": "autonomous",
+        "action": {"parsed": {"blocks": [{"block": "Morning", "intent": "jump from the loft"}]}},
+        "results": {"$CID": [{"kind": "own", "language": "en",
+          "facts": [{"block": "Morning", "kind": "result", "text": "You fall badly."}],
+          "prompts": [{"id": "q", "type": "next", "text": "What now?", "options": []}],
+          "narration_hints": {"mood": "", "pace": "", "senses": [], "do_not": []}}]},
+        "state_changes": [
+          {"op": "append", "entity": "character", "id": "$CID", "path": "turn_state.blocks_used", "doc": "Morning"},
+          {"op": "merge", "entity": "character", "id": "$CID", "patch": {"is_alive": false, "death": {"turn": "$TURN", "cause": "fall", "summary": "You fell."}}}],
+        "events": [], "decisions": [], "messages": [], "shared_digest": [], "dice_log": [], "errors": []
+      },
+      "expect_engine": "rejects"
+    }
+  ]
+}

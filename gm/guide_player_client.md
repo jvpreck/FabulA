@@ -36,6 +36,7 @@ title: Player client guide, how to use FabulA
 
 1. Start every session with `get_results` (all games, or one `game_id`). Narrate what is new.
 2. Ask the player what the character does. Send it with `submit_action` (`kind: "action"`, free text). Small things that only involve the character resolve at once and come back in the reply. Bigger things wait for the turn, and the results arrive with a later `get_results`.
+   Give every new `submit_action` its own `request_id` (any fresh unique string, up to 64 characters). If a call times out or fails and you did not see the answer, send it again with the **same** `request_id`: the server runs it once and returns the first answer. Never reuse a `request_id` for a different request.
 3. Speech to another character in the same place: `kind: "say"`. Messages to other players: `kind: "message"`. Standing orders for when the player is away: `kind: "standing_orders"`.
 4. Keep the three artifacts described in the `narrator` guide up to date.
 

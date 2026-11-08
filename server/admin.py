@@ -19,7 +19,7 @@ COMMANDS = {
     "delete_adventure": "adventure_id [force]: removes a generated adventure; refused while games use it unless force is true",
     "delete_player": "player_id [force]: removes the player and their characters, and takes them out of games",
     "reset_player_key": "player_id: issues a new secret key (shown once) when a player lost theirs or it leaked",
-    "gm_usage": "no arguments: AI Master requests used today per model, and the limits",
+    "gm_usage": "[day YYYY-MM-DD]: AI Master requests used today per model, the limits, and the call statistics (tokens, cache share, retries, latency) by level, request type and game",
     "generate_images": "no arguments: draws the queued pictures now (the scheduler also does it after each run)",
     "list_rulesets": "no arguments: imported rulesets with status pending, approved or rejected",
     "review_ruleset": "ruleset_id: what a pending ruleset contains (fields, headings, checklist rows, suspicious wording flags), not the full text",
@@ -205,7 +205,9 @@ def _cmd_purge_tasks(engine, args):
 
 def _cmd_gm_usage(engine, args):
     from .gm import Usage
-    return {"usage": Usage(engine.store, engine.now_fn).today(), "note": "Counts are per provider day (Pacific time)."}
+    u = Usage(engine.store, engine.now_fn)
+    return {"usage": u.today(), "calls": u.stats(args.get("day")), "note": "Counts are per provider day (Pacific time). `calls` is the AI Master "
+            "call log of the day: by level|tier|mode|request kind, and by game, with tokens, cached share, retries and latency."}
 
 
 def _cmd_generate_images(engine, args):
