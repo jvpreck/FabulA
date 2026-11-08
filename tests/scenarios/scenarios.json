@@ -37,7 +37,10 @@
           "narration_hints": {"mood": "", "pace": "", "senses": [], "do_not": []}}]},
         "state_changes": [], "events": [], "decisions": [], "messages": [], "shared_digest": [], "dice_log": [], "errors": []
       },
-      "expect_engine": "accepts"
+      "expect_engine": "accepts",
+      "live": true,
+      "live_secrets": ["FOREMAN-IS-IN-THE-WELL"],
+      "live_adventure_extra": "The missing foreman is dead: FOREMAN-IS-IN-THE-WELL. The miller knows nothing about it and nobody has found any clue yet."
     },
     {
       "name": "minor_action_uses_server_dice_in_order",
@@ -55,7 +58,10 @@
         "dice_log": [{"die": "d6", "value": "$D6[0]", "for": "$CID Morning Search"}],
         "errors": []
       },
-      "expect_engine": "accepts"
+      "expect_engine": "accepts",
+      "live": true,
+      "live_secrets": ["LEDGER-HIDDEN-UNDER-THE-FLOOR"],
+      "live_adventure_extra": "The mill office desk holds only receipts. A ledger is hidden under the floor: LEDGER-HIDDEN-UNDER-THE-FLOOR. A search of the desk alone cannot find it."
     },
     {
       "name": "gm_only_fields_never_reach_the_players",
