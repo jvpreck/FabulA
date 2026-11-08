@@ -29,4 +29,4 @@ This repository is public: never write secrets, keys or private game data in it.
 - Idea: route pregen and character checks to the light model if the strong model keeps timing out.
 
 ## Working with the owner
-The owner (Jorge) writes in English here. He wants proposals and drafts first, and decisions confirmed before anything is pushed or deployed. He prefers not to keep permanent local copies of his GitHub repos: use one working clone in your own working folder, keep it current with git pull, and delete any extra clones after use.
+The owner writes in English here. He wants proposals and drafts first, and decisions confirmed before anything is pushed or deployed. He prefers not to keep permanent local copies of his GitHub repos: use one working clone in your own working folder, keep it current with git pull, and delete any extra clones after use.
