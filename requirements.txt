@@ -3,3 +3,4 @@ supabase
 google-genai>=1.50
 PyYAML
 pillow
+tzdata

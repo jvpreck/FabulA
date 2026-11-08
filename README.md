@@ -131,10 +131,11 @@ Each game has a setting `illustrations` (`on` by default when the server can dra
 
 ## Setup
 
-1. Run `supabase/schema.sql` in the Supabase SQL editor (it is safe to run again: it adds the `gm_tasks`, `gm_keys`, `gm_usage` and `gm_images` tables and the private `gm-images` storage bucket).
+1. Run `supabase/schema.sql` in the Supabase SQL editor (it is safe to run again: it adds the `gm_tasks`, `gm_keys`, `gm_usage` and `gm_images` tables and the private `gm-images` storage bucket). Run it again after every update of the repository: it also installs the `gm_commit` function, which saves all the records of a request in one database transaction (until it is installed the server saves them one by one, as before).
 2. Environment variables on Vercel:
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
    - `GEMINI_API_KEY`. Optional: `GEMINI_MODEL_TURN` (default `gemini-3.8-flash`), `GEMINI_MODEL_LIGHT` (default `gemini-3.5-flash-lite`; the old `GEMINI_MODEL` still works as its name), `GEMINI_THINKING_LEVEL` (default `medium`) and `GEMINI_THINKING_LEVEL_TURN`
+   - Optional: `GEMINI_STRUCTURED_OUTPUT` (default `on`): Gemini is made to answer in the shape of the state contract (`server/schema.py`). If the provider refuses the schema the server stops sending it and says so in the call statistics. Set `off` to disable it
    - Optional quota guards, with headroom under the free tier: `GEMINI_TURN_RPD` (18) and `GEMINI_TURN_RPM` (4), `GEMINI_LIGHT_RPD` (450) and `GEMINI_LIGHT_RPM` (9)
    - `MCP_API_KEY`: the shared key for players (`Authorization: Bearer`, `x-api-key`, or `?key=` in the connector URL)
    - `CRON_SECRET`: for `/internal/resolve_turn`
@@ -150,6 +151,17 @@ Each game has a setting `illustrations` (`on` by default when the server can dra
 pip install -r requirements.txt pytest
 pytest tests
 ```
+
+`tests/scenarios/scenarios.json` holds recorded scenarios for the AI Master: requests with its answers, checked for structure, dice integrity and secrecy on every run. Before releasing a change to the instructions in `gm/` or to a ruleset, run them against the real model (the live scenarios send the current instructions to Gemini and apply the same checks to what it answers):
+
+```
+FABULA_LIVE_SCENARIOS=1 GEMINI_API_KEY=... pytest tests/test_scenarios.py -k live -s
+```
+
+## Call statistics and repeated requests
+
+- **Call statistics.** Every AI Master call is counted per day by level (3 immediate, 4 at the turn close), tier, mode, request kind and game: calls, valid and invalid answers, retries, tokens in, cached tokens, tokens out, thinking tokens and latency. The host command `gm_usage` shows them (optionally `day`).
+- **Repeated requests.** `submit_action` takes an optional `request_id`. Sending the same id again (after a timeout, a double click) runs the request once and returns the first answer, marked `duplicate_request`. The server remembers the last 5 requests of a player for an hour.
 
 ## Known limits
 
