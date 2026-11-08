@@ -51,8 +51,8 @@ RESPONSE_SCHEMA = {
         "illustrations": _LIST_OF_OBJECTS,
         "portraits": _LIST_OF_OBJECTS,
         "gm_notes": {"type": "string"},
-        "validation": _OBJ,
-        "action": _OBJ,
+        "validation": {"type": "object", "nullable": True},  # the contract allows null (section 6.2)
+        "action": {"type": "object", "nullable": True},
         "errors": {"type": "array", "items": {"type": "string"}},
     },
     "required": ["status"],
@@ -62,6 +62,8 @@ RESPONSE_SCHEMA = {
 def check(data, schema=RESPONSE_SCHEMA, path="$"):
     """Returns a list of problems (empty when `data` fits `schema`). Handles type, enum, required, properties, items, additionalProperties."""
     problems = []
+    if data is None and schema.get("nullable"):
+        return problems
     t = schema.get("type")
     py = {"object": dict, "array": list, "string": str, "integer": int, "number": (int, float), "boolean": bool}
     if t and not isinstance(data, py[t]) or (t == "integer" and isinstance(data, bool)):
