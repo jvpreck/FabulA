@@ -87,6 +87,15 @@
       "expect_engine": "accepts"
     },
     {
+      "name": "turn_close_is_resolved_for_the_player",
+      "live_only": true,
+      "live": true,
+      "request": {"kind": "resolve_turn", "text": ""},
+      "setup_action": "I wait in the mill office and watch the door.",
+      "live_secrets": ["TRAPDOOR-BEHIND-THE-SHELF"],
+      "live_adventure_extra": "There is a trapdoor behind the shelf in the mill office: TRAPDOOR-BEHIND-THE-SHELF. Nobody has noticed it, and waiting and watching the door does not reveal it."
+    },
+    {
       "name": "BAD_invented_dice_are_detected",
       "request": {"kind": "action", "text": "I force the lock."},
       "recorded": {

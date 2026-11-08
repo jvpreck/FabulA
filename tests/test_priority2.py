@@ -195,8 +195,8 @@ def test_a_provider_that_refuses_caching_is_left_alone_for_a_while(monkeypatch):
     assert gm.last_meta["cache"].startswith("off") and sent[0].system_instruction == BIG and not sent[0].cached_content
     gm.call(BIG, "{}", tier="light")
     assert len(caches.created) == 1, "no second attempt within the waiting time"
-    gm._cache_off_until = 0  # the waiting time has passed, here and in the note shared with the other instances
-    gm.usage.store.delete("usage", "cache:off")
+    gm._cache_off.clear()  # the waiting time has passed, here and in the note shared with the other instances
+    gm.usage.store.delete("usage", f"cache:off:{config.GEMINI_MODEL_LIGHT}")
     gm.call(BIG, "{}", tier="light")
     assert len(caches.created) == 2, "tried again after the waiting time"
 
@@ -308,9 +308,32 @@ def test_one_refusal_is_shared_with_the_other_server_instances_and_kept_through_
     first.call(BIG, "{}", tier="light")
     assert first.last_meta["cache"].startswith("off: ") and "FreeTier" in first.last_meta["cache"]
     first._meta = {"cache": first.last_meta["cache"]}
-    first._cached("m", BIG)  # a retry of the same request in the same call
+    first._cached(config.GEMINI_MODEL_LIGHT, BIG)  # a retry of the same request in the same call
     assert first._meta["cache"].startswith("off: "), "the reason is not overwritten"
     other = make_gm(monkeypatch, refused, FakeModels(sent), store)
     other.call(BIG, "{}", tier="light")
     assert len(refused.created) == 1, "the second instance did not ask the provider again"
     assert "FreeTier" in other.last_meta["cache"]
+
+
+def test_a_refusal_for_one_model_does_not_stop_caching_for_the_other(monkeypatch):
+    """The free tier offers caching for the strong model but not for the light one."""
+    sent = []
+
+    class PerModel(FakeCaches):
+        def create(self, model, config):
+            if "lite" in model:
+                self.created.append((model, config))
+                raise Exception("429 RESOURCE_EXHAUSTED: TotalCachedContentStorageTokensPerModelFreeTier")
+            return super().create(model, config)
+
+    caches = PerModel()
+    gm = make_gm(monkeypatch, caches, FakeModels(sent))
+    gm._generate("gemini-3.5-flash-lite", "medium", BIG, "{}")
+    assert gm._meta["cache"].startswith("off")
+    gm._meta = {}
+    gm._generate("gemini-3.8-flash", "medium", BIG, "{}")
+    assert gm._meta["cache"] == "created" and sent[-1].cached_content, "the strong model still gets its copy"
+    gm._meta = {}
+    gm._generate("gemini-3.5-flash-lite", "medium", BIG, "{}")
+    assert gm._meta["cache"].startswith("off") and len(caches.created) == 2, "the light model is not asked again"

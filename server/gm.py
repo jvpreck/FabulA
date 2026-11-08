@@ -143,7 +143,7 @@ class GeminiGM:
         self._meta = {}  # token counts and retries of the call in progress
         self._structured = config.GEMINI_STRUCTURED_OUTPUT
         self._caches = {}  # cache key -> {"name", "expires"}: the provider-side copy of an instruction text
-        self._cache_off_until = 0.0
+        self._cache_off = {}  # model -> {"until", "note"}: the provider's free tier offers caching for some models only
         self._sleep = sleep or __import__("time").sleep
 
     def _get(self):
@@ -231,15 +231,16 @@ class GeminiGM:
         if config.GEMINI_CONTEXT_CACHE == "off" or len(system) < config.CACHE_MIN_CHARS:
             return None
         now = time.time()
-        if now >= self._cache_off_until and self.usage is not None:  # another instance may already have been refused
+        off = self._cache_off.get(model)
+        if (off is None or now >= off["until"]) and self.usage is not None:  # another instance may already have been refused for this model
             try:
-                note = self.usage.store.get("usage", "cache:off")[0]
+                note = self.usage.store.get("usage", f"cache:off:{model}")[0]
                 if note and note.get("until", 0) > now:
-                    self._cache_off_until, self._cache_off_note = note["until"], note.get("reason", "")
+                    off = self._cache_off[model] = {"until": note["until"], "note": note.get("reason", "")}
             except Exception:
                 pass
-        if now < self._cache_off_until:
-            self._meta.setdefault("cache", "off" + (": " + self._cache_off_note if getattr(self, "_cache_off_note", "") else ""))
+        if off is not None and now < off["until"]:
+            self._meta.setdefault("cache", "off" + (": " + off["note"] if off["note"] else ""))
             return None
         key = self._cache_key(model, system)
         entry = self._caches.get(key)
@@ -259,13 +260,14 @@ class GeminiGM:
             made = self._get_beta().caches.create(model=model, config=types.CreateCachedContentConfig(
                 system_instruction=system, ttl=f"{config.GEMINI_CACHE_TTL_SECONDS}s", display_name="fabula-" + key[:12]))
         except Exception as e:
-            self._cache_off_until = now + (60 if self._transient(e) else config.CACHE_OFF_SECONDS)
-            self._cache_off_note = f"{type(e).__name__} {e}"[:120]
-            self._meta["cache"] = "off: " + self._cache_off_note
+            until = now + (60 if self._transient(e) else config.CACHE_OFF_SECONDS)
+            note = f"{type(e).__name__} {e}"[:120]
+            self._cache_off[model] = {"until": until, "note": note}
+            self._meta["cache"] = "off: " + note
             if self.usage is not None and not self._transient(e):  # tell the other instances, so each does not ask again
                 try:
-                    doc, ver = self.usage.store.get("usage", "cache:off")
-                    self.usage.store.put("usage", "cache:off", {"id": "cache:off", "until": self._cache_off_until, "reason": self._cache_off_note}, ver)
+                    doc, ver = self.usage.store.get("usage", f"cache:off:{model}")
+                    self.usage.store.put("usage", f"cache:off:{model}", {"id": f"cache:off:{model}", "until": until, "reason": note}, ver)
                 except Exception:
                     pass
             return None
