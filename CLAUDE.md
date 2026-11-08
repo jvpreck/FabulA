@@ -14,7 +14,7 @@ This repository is public: never write secrets, keys or private game data in it.
 - Saves: Workspace.commit writes all records of a request through the Postgres function gm_commit (supabase/schema.sql, installed in Supabase 2026-11-08, tested in a rolled-back transaction). Without the function the server falls back to one-by-one saves. Re-run schema.sql after schema changes.
 - Every AI Master call is counted per day by level, tier, mode, request kind and game in gm_usage (record stats:<day>); the host command gm_usage shows it.
 - submit_action accepts request_id: the same id runs once and returns the first answer (kept in the player record, 5 per player, 1 hour).
-- Gemini answers are forced into the shape in server/schema.py (GEMINI_STRUCTURED_OUTPUT, default on; the server turns it off by itself if the provider refuses it).
+- Structured output (server/schema.py, GEMINI_STRUCTURED_OUTPUT) is OFF by default: the schema declares objects without fields, so the provider returned empty validation, action, events and state-change patches (found 2026-11-08). TLR-03-015 is pending until the schema declares every object in full and the live scenarios check that those fields arrive.
 - Gemini: strong model for turn closing and character checks (gemini-3.8-flash), light model for everything else (gemini-3.5-flash-lite).
 
 ## Conventions
