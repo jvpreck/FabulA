@@ -233,33 +233,62 @@ class Engine:
         scale = 1
         tries = 0
         dice_rounds = 0
+        level = 4 if mode == "resolve_turn" else 3  # TLR-01-007: the AI Master at the turn close, or at once
         while tries < config.GM_MAX_ATTEMPTS:
             env = self._envelope(ws, game, adventure, mode, request, requester_cid, scale, errors)
+            outcome = "ok"
             try:
-                resp = parse(self.gm.call(system, json.dumps(env, ensure_ascii=False), tier=tier))
-            except GMBusy as e:
-                raise EngineError(str(e))
-            except GMUnavailable as e:
-                raise GeminiTrouble(e.reason)
-            except GMError as e:
-                errors, tries = [str(e)], tries + 1
-                continue
-            if resp.get("status") == "needs_dice" and dice_rounds < 2:
-                scale, dice_rounds = scale * 2, dice_rounds + 1
-                continue
-            if resp.get("status") != "ok":
-                raise EngineError(f"the GM could not complete the request: {resp.get('errors')}")
-            snap = ws.snapshot()
-            try:
-                self._apply(ws, game_id, mode, resp, request, post, store_in_turn)
-            except ap.ApplyError as e:
-                ws.restore(snap)
-                game = self._game(ws, game_id)
-                errors, tries = [f"Your previous response was rejected and nothing was applied: {e}"], tries + 1
-                continue
-            self._note_model(ws, game_id, mode, turn0)
-            return resp
+                try:
+                    resp = parse(self.gm.call(system, json.dumps(env, ensure_ascii=False), tier=tier))
+                except GMBusy as e:
+                    outcome = "failed"
+                    raise EngineError(str(e))
+                except GMUnavailable as e:
+                    outcome = "failed"
+                    raise GeminiTrouble(e.reason)
+                except GMError as e:
+                    outcome = "invalid_json"
+                    errors, tries = [str(e)], tries + 1
+                    continue
+                if resp.get("status") == "needs_dice" and dice_rounds < 2:
+                    outcome = "needs_dice"
+                    scale, dice_rounds = scale * 2, dice_rounds + 1
+                    continue
+                if resp.get("status") != "ok":
+                    outcome = "failed"
+                    raise EngineError(f"the GM could not complete the request: {resp.get('errors')}")
+                snap = ws.snapshot()
+                try:
+                    self._apply(ws, game_id, mode, resp, request, post, store_in_turn)
+                except ap.ApplyError as e:
+                    outcome = "rejected"
+                    ws.restore(snap)
+                    game = self._game(ws, game_id)
+                    errors, tries = [f"Your previous response was rejected and nothing was applied: {e}"], tries + 1
+                    continue
+                self._note_model(ws, game_id, mode, turn0)
+                return resp
+            except Exception:
+                if outcome == "ok":
+                    outcome = "failed"
+                raise
+            finally:
+                self._log_call(game_id, level, tier, mode, request, outcome, tries)
         raise EngineError(f"the GM response was rejected {tries} times: {errors}")
+
+    def _log_call(self, game_id, level, tier, mode, request, outcome, attempt):
+        """TLR-08-006: one line in the day's statistics for every AI Master call. It never blocks or fails a request."""
+        try:
+            usage = getattr(self.gm, "usage", None)
+            if usage is None:
+                return
+            meta = dict(getattr(self.gm, "last_meta", None) or {})
+            usage.record({"level": level, "tier": (getattr(self.gm, "last", None) or {}).get("tier") or tier, "mode": mode,
+                          "kind": (request or {}).get("kind") or "-", "game_id": game_id, "outcome": outcome,
+                          "retries": int(meta.get("retries") or 0) + (1 if attempt else 0), **{k: meta.get(k) for k in (
+                              "latency_ms", "tokens_in", "tokens_cached", "tokens_out", "tokens_thought")}})
+        except Exception:
+            pass
 
     def _note_model(self, ws, game_id, mode, turn):
         """Records which model closed a turn and whether it was the fallback, so the host can see it."""
@@ -1530,7 +1559,79 @@ class Engine:
         return {"accepted": True, "task_id": task_id, "character_id": c["id"], "validation": v, **out}
 
     # ---- submit_action
-    def submit_action(self, player_id, game_id, kind, text="", character_id=None, payload=None):
+    def submit_action(self, player_id, game_id, kind, text="", character_id=None, payload=None, request_id=""):
+        """TLR-06-010: with a `request_id`, sending the same request again (a client retry after a timeout, a double click) has the effect of
+        one request: the second call returns the first call's result (or says the first is still running) and changes nothing."""
+        if not request_id:
+            return self._submit_action_once(player_id, game_id, kind, text, character_id, payload)
+        if not isinstance(request_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", request_id):
+            raise EngineError("request_id must be 1 to 64 letters, digits or _ . : -")
+        key = f"{game_id}:{request_id}"
+        seen = self._claim_request(player_id, key)
+        if seen is not None:
+            return {**seen, "duplicate_request": request_id}
+        try:
+            out = self._submit_action_once(player_id, game_id, kind, text, character_id, payload)
+        except BaseException:
+            self._release_request(player_id, key)
+            raise
+        self._store_request_result(player_id, key, out)
+        return out
+
+    def _claim_request(self, player_id, key):
+        """None when this call may run (the request is now claimed); the stored result when the same request already finished."""
+        for _ in range(6):
+            ws = self._ws()
+            p = self._player(ws, player_id)
+            reqs = p.setdefault("requests", {})
+            now = self.now()
+            for k in [k for k, e in reqs.items() if (now - datetime.fromisoformat(e["at"].replace("Z", "+00:00"))).total_seconds() > config.REQUEST_RESULT_TTL_SECONDS]:
+                del reqs[k]
+            e = reqs.get(key)
+            if e:
+                age = (now - datetime.fromisoformat(e["at"].replace("Z", "+00:00"))).total_seconds()
+                if e["status"] == "done":
+                    return e["result"]
+                if age < config.REQUEST_CLAIM_SECONDS:
+                    raise EngineError("that request is still being processed. Wait a few seconds and call get_results; do not send it again")
+            reqs[key] = {"status": "started", "at": iso(now)}
+            while len(reqs) > config.REQUEST_KEEP:
+                del reqs[min(reqs, key=lambda k: reqs[k]["at"])]
+            ws.touch("player", player_id)
+            try:
+                ws.commit()
+                return None
+            except Conflict:
+                continue
+        raise EngineError("the server is busy with another request from you; try again in a moment")
+
+    def _store_request_result(self, player_id, key, out):
+        for _ in range(6):
+            try:
+                ws = self._ws()
+                p = self._player(ws, player_id)
+                p.setdefault("requests", {})[key] = {"status": "done", "at": iso(self.now()), "result": out}
+                ws.touch("player", player_id)
+                ws.commit()
+                return
+            except Conflict:
+                continue
+
+    def _release_request(self, player_id, key):
+        """The request failed: forget the claim so that the client can send it again."""
+        for _ in range(6):
+            try:
+                ws = self._ws()
+                p = self._player(ws, player_id)
+                if (p.get("requests") or {}).pop(key, None) is None:
+                    return
+                ws.touch("player", player_id)
+                ws.commit()
+                return
+            except Conflict:
+                continue
+
+    def _submit_action_once(self, player_id, game_id, kind, text="", character_id=None, payload=None):
         kind = kind if kind in PLAYER_KINDS else "free_query"
         payload = dict(payload or {})
         ws = self._ws()

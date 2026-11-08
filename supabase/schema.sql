@@ -89,3 +89,44 @@ create table if not exists gm_rulesets (
   id text primary key, data jsonb not null, version int not null default 1,
   status text, updated_at timestamptz not null default now());
 alter table gm_rulesets enable row level security;
+
+-- Atomic commit (TLR-06-009). The server sends every record a request changed in one call; they are all written or none are.
+-- Each item: {table, id, version, data, index}. version 0 = insert; otherwise update only if the stored version still matches,
+-- else the whole call fails with 'conflict:' and nothing is written. Returns the new versions in order.
+-- Index columns are the table's own columns named in `index` (phase, game_id, ...). Run again any time: it is idempotent.
+create or replace function gm_commit(batch jsonb) returns jsonb
+language plpgsql as $$
+declare
+  item jsonb; tbl text; rid text; ver int; idx jsonb; dat jsonb; cols text; sets text; n int; out jsonb := '[]'::jsonb;
+begin
+  for item in select * from jsonb_array_elements(batch) loop
+    tbl := item->>'table'; rid := item->>'id'; ver := (item->>'version')::int;
+    dat := item->'data'; idx := coalesce(item->'index', '{}'::jsonb);
+    if tbl !~ '^gm_[a-z_]+$' or to_regclass('public.' || quote_ident(tbl)) is null then
+      raise exception 'bad table %', tbl;
+    end if;
+    if ver = 0 then
+      idx := idx || jsonb_build_object('id', rid, 'data', dat, 'version', 1, 'updated_at', now());
+      select string_agg(format('%I', k), ', ') into cols from jsonb_object_keys(idx) k;
+      begin
+        execute format('insert into %I (%s) select %s from jsonb_populate_record(null::%I, $1)', tbl, cols, cols, tbl) using idx;
+      exception when unique_violation then
+        raise exception 'conflict: % % already exists', tbl, rid;
+      end;
+      out := out || to_jsonb(1);
+    else
+      idx := idx || jsonb_build_object('data', dat, 'version', ver + 1, 'updated_at', now());
+      select string_agg(format('%I = r.%I', k, k), ', ') into sets from jsonb_object_keys(idx) k;
+      execute format('update %I t set %s from jsonb_populate_record(null::%I, $1) r where t.id = $2 and t.version = $3', tbl, sets, tbl)
+        using idx, rid, ver;
+      get diagnostics n = row_count;
+      if n = 0 then
+        raise exception 'conflict: % % changed', tbl, rid;
+      end if;
+      out := out || to_jsonb(ver + 1);
+    end if;
+  end loop;
+  return out;
+end $$;
+revoke all on function gm_commit(jsonb) from public, anon, authenticated;
+grant execute on function gm_commit(jsonb) to service_role;

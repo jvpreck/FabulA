@@ -50,6 +50,7 @@ STYLE_MIN, STYLE_MAX = 40, 700
 IMAGE_TIMEOUT_SECONDS = 25
 FUNCTION_BUDGET_SECONDS = int(os.environ.get("FUNCTION_BUDGET_SECONDS", "240"))  # Vercel maxDuration is 300 (see vercel.json)
 TURN_RESERVE_SECONDS = int(os.environ.get("TURN_RESERVE_SECONDS", "110"))  # no new turn is started with less than this left
+GEMINI_STRUCTURED_OUTPUT = os.environ.get("GEMINI_STRUCTURED_OUTPUT", "on").lower() not in ("off", "0", "false", "no")  # the provider enforces the response schema (server/schema.py)
 GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "100"))  # one model call must never outlive the function
 GEMINI_RETRIES = int(os.environ.get("GEMINI_RETRIES", "3"))  # extra attempts after a transient Gemini error (503 "high demand", 500, 502, 504)
 GEMINI_RETRY_BASE_SECONDS = float(os.environ.get("GEMINI_RETRY_BASE_SECONDS", "2"))  # waits are base, 3x base, 9x base, with jitter
@@ -86,3 +87,8 @@ TASK_MAX_ATTEMPTS = 5
 BLOCKS = ["Morning", "Afternoon", "Evening", "Night"]
 SPAN_BLOCKS = {"day": 4, "block": 1, "beat": 1}
 SAY_MAX_CHARS = 500
+
+# Idempotent requests (TLR-06-010): a request_id sent twice runs once.
+REQUEST_RESULT_TTL_SECONDS = int(os.environ.get("REQUEST_RESULT_TTL_SECONDS", "3600"))  # how long a finished request's result can be served again
+REQUEST_CLAIM_SECONDS = int(os.environ.get("REQUEST_CLAIM_SECONDS", "300"))  # a claim older than this is a request that died (Vercel's limit is 300 s)
+REQUEST_KEEP = 5  # most remembered requests per player

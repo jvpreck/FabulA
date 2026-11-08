@@ -33,7 +33,7 @@
 | `generate_character` | The player wants a new character. `generate` and `provided` return a work package (§3). `pregen` and `from_npc` act at once. |
 | `import_ruleset` | The player has a game system document and wants to play it. Returns a work package; the ruleset waits for the host's approval. |
 | `submit_package` | Send back a finished work package. |
-| `submit_action` | Anything the player does or says that the server must handle: an action, setup answers, standing orders, a decision, a message, speech to a character, a free query. |
+| `submit_action` | Anything the player does or says that the server must handle: an action, setup answers, standing orders, a decision, a message, speech to a character, a free query. Send a fresh `request_id` with each one; repeat the same `request_id` only to retry a call whose answer you did not see. |
 | `get_results` | Collect results that have not been delivered yet. Call it at the start of every session and whenever the player asks "what happened". |
 | `get_character` | Rebuild the artifacts from the server, or answer a question the artifacts cannot. |
 | `list_images` | The player wants to see the pictures of the story (§11). |

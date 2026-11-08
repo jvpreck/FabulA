@@ -25,6 +25,15 @@ class MemoryStore:
         self.t[kind][id_] = {"data": copy.deepcopy(data), "version": cur + 1, "index": dict(index or {})}
         return cur + 1
 
+    def put_many(self, items):
+        """TLR-06-009: all the records are written, or none. `items` is a list of (kind, id, data, version, index)."""
+        for kind, id_, data, version, index in items:
+            row = self.t[kind].get(id_)
+            cur = row["version"] if row else 0
+            if cur != version:
+                raise Conflict(f"{kind}:{id_} version {cur} != {version}")
+        return [self.put(kind, id_, data, version, index) for kind, id_, data, version, index in items]
+
     def delete(self, kind, id_):
         self.t[kind].pop(id_, None)
 
@@ -68,6 +77,25 @@ class SupabaseStore:
         if not r:
             raise Conflict(f"{kind}:{id_} changed")
         return version + 1
+
+    _no_rpc = False
+
+    def put_many(self, items):
+        """TLR-06-009: one database transaction (the `gm_commit` function in supabase/schema.sql) writes every record or none.
+        If the function has not been created yet (schema.sql not run again), the records are written one by one, as before."""
+        if not self._no_rpc:
+            batch = [{"table": config.TABLES[k], "id": i, "version": v, "data": d, "index": ix or {}} for k, i, d, v, ix in items]
+            try:
+                return [int(v) for v in self.c.rpc("gm_commit", {"batch": batch}).execute().data]
+            except Exception as e:
+                m = f"{getattr(e, 'message', '')} {e}"
+                if "conflict:" in m:
+                    raise Conflict(m)
+                if "gm_commit" in m and ("PGRST202" in m or "Could not find" in m or "does not exist" in m):
+                    type(self)._no_rpc = True  # not installed: fall back, and do not ask again in this process
+                else:
+                    raise
+        return [self.put(k, i, d, v, ix) for k, i, d, v, ix in items]
 
     def delete(self, kind, id_):
         self._tbl(kind).delete().eq("id", id_).execute()
@@ -190,11 +218,12 @@ class Workspace:
         return self.find("character", game_id=game_id)
 
     def commit(self):
-        for key in sorted(self.dirty):
-            kind, id_ = key
-            doc = self.docs[key]
-            if doc is None:
-                continue
-            ver = self.versions[key]
-            self.versions[key] = self.store.put(kind, id_, doc, ver, index_for(kind, doc))
+        keys = [k for k in sorted(self.dirty) if self.docs[k] is not None]
+        items = [(k[0], k[1], self.docs[k], self.versions[k], index_for(k[0], self.docs[k])) for k in keys]
+        if hasattr(self.store, "put_many"):  # all together or nothing
+            for k, v in zip(keys, self.store.put_many(items)):
+                self.versions[k] = v
+        else:
+            for k, (kind, id_, doc, ver, ix) in zip(keys, items):
+                self.versions[k] = self.store.put(kind, id_, doc, ver, ix)
         self.dirty.clear()
