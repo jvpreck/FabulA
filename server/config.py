@@ -54,6 +54,7 @@ GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "100"))  #
 GEMINI_RETRIES = int(os.environ.get("GEMINI_RETRIES", "3"))  # extra attempts after a transient Gemini error (503 "high demand", 500, 502, 504)
 GEMINI_RETRY_BASE_SECONDS = float(os.environ.get("GEMINI_RETRY_BASE_SECONDS", "2"))  # waits are base, 3x base, 9x base, with jitter
 GEMINI_RETRY_BUDGET_SECONDS = float(os.environ.get("GEMINI_RETRY_BUDGET_SECONDS", "40"))  # total time spent waiting between attempts for one request
+GEMINI_RETRY_MAX_CALL_SECONDS = float(os.environ.get("GEMINI_RETRY_MAX_CALL_SECONDS", "20"))  # a call that already ran longer than this (a slow 504 gateway timeout) is not retried
 INLINE_IMAGE_SECONDS = int(os.environ.get("INLINE_IMAGE_SECONDS", "40"))  # pictures drawn during a player call, so they do not wait for the scheduler
 AUTO_PICTURES_PER_RESPONSE = int(os.environ.get("AUTO_PICTURES_PER_RESPONSE", "3"))  # automatic place and NPC pictures written by the server per response
 AUTO_PICTURES_MAX_PENDING = int(os.environ.get("AUTO_PICTURES_MAX_PENDING", "8"))  # no new automatic pictures while this many wait in a game

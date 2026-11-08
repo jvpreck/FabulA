@@ -130,19 +130,24 @@ class GeminiGM:
     def _generate_retrying(self, model, level, system, user):
         """One model call, retried with exponential backoff and jitter on transient errors, within a total waiting budget."""
         import random
+        import time
         waited = 0.0
         attempt = 0
         while True:
+            started = time.monotonic()
             try:
                 return self._generate(model, level, system, user)
             except Exception as e:
+                took = time.monotonic() - started
                 if attempt >= config.GEMINI_RETRIES or not self._transient(e):
                     raise
+                if took > config.GEMINI_RETRY_MAX_CALL_SECONDS:  # a 504 that came back after ~100 s is a timeout: retrying costs another 100 s
+                    raise
                 delay = config.GEMINI_RETRY_BASE_SECONDS * (3 ** attempt) * (1 + random.random() * 0.25)
-                if waited + delay > config.GEMINI_RETRY_BUDGET_SECONDS:
+                if waited + took + delay > config.GEMINI_RETRY_BUDGET_SECONDS:  # the budget is total time, calls included
                     raise
                 self._sleep(delay)
-                waited += delay
+                waited += took + delay
                 attempt += 1
 
     def call(self, system: str, user: str, tier: str = "light") -> str:

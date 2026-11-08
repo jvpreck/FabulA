@@ -292,3 +292,35 @@ def test_writes_to_server_owned_fields_are_dropped_not_rejected():
     c = ws.d[("character", "c1")]
     assert c["events"] == [] and c["hp"] == 3          # server-owned writes dropped, the rest applied
     assert len(ap.ignored) == 2
+
+
+class Err504(Exception):
+    code = 504
+
+
+def _fake_time(monkeypatch):
+    now = {"t": 1000.0}
+    monkeypatch.setattr("time.monotonic", lambda: now["t"])
+    return now
+
+
+def test_a_slow_504_is_not_retried(monkeypatch):
+    now = _fake_time(monkeypatch)
+    store, clock = MemoryStore(), Clock()
+
+    class Slow(FlakyGemini):
+        def _generate(self, model, level, system, user):
+            now["t"] += 98                                  # Google's gateway gave up after ~100 s
+            return super()._generate(model, level, system, user)
+    g = Slow(usage(store, clock), [Err504("504 Gateway Timeout")])
+    assert g.call("s", "u", tier="tick") == "{}"
+    assert g.pauses == []                                   # no backoff and no second 100 s attempt on the strong model
+    assert g.calls == [config.GEMINI_MODEL_TICK, config.GEMINI_MODEL_LIGHT] and g.last["degraded"]
+
+
+def test_a_quick_504_is_still_retried(monkeypatch):
+    _fake_time(monkeypatch)
+    store, clock = MemoryStore(), Clock()
+    g = FlakyGemini(usage(store, clock), [Err504("504 Gateway Timeout")])
+    assert g.call("s", "u") == "{}"
+    assert len(g.pauses) == 1 and len(g.calls) == 2
