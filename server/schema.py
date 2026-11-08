@@ -1,5 +1,10 @@
 """The shape of the AI Master's response (state contract §6), as a JSON schema (TLR-03-015).
 
+NOT SWITCHED ON (GEMINI_STRUCTURED_OUTPUT is off by default). The provider fills an object that has no declared `properties` with an empty
+`{}`: with this schema `validation`, `action`, `events`, `decisions`, `messages` and `dice_log` come back empty and `state_changes` entries can
+carry only op, entity and id (no `patch`, `path` or `doc`). A character check then ends without a verdict. Before this is switched on again every
+object the contract defines must be declared in full (state contract sections 6.2 to 6.7), and the live scenarios must check that those fields arrive.
+
 Gemini is asked to produce exactly this shape (`response_json_schema`), so a malformed answer is rare. The schema fixes the containers
 (object, list), the `status` values and the fields every result item needs; it does not fix the contents of state changes, events or
 facts, which `apply.py` still validates. It is deliberately permissive: a schema stricter than the contract would reject good answers.
