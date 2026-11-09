@@ -29,7 +29,7 @@ The documents the AI Master reads (`protocol.md`, `oracles.md`, `state_and_messa
 <!-- for: turn -->
 ```
 
-- `for: turn, play, setup` keeps the section only for those request profiles. `turn` is the turn close. `setup` is creating a game, joining, setup answers and the character routes (`game_created`, `join`, `setup_answers`, `character_submission`, `character_confirm`). `play` is every other request.
+- `for: turn, play, setup, check` keeps the section only for those request profiles. `check` is checking a character sheet (`character_submission`): it also leaves out the whole oracles document. List every profile that needs the section; a profile not listed does not get it (TLR-03-017). `turn` is the turn close. `setup` is creating a game, joining, setup answers and the character routes (`game_created`, `join`, `setup_answers`, `character_submission`, `character_confirm`). `play` is every other request.
 - `needs: illustrations, generated` keeps it only when pictures are on and the server can draw them (`illustrations`), or when the adventure is not a supplied one (`generated`).
 - The tag applies to the heading and everything under it, sub-sections included, up to the next heading of the same or a higher level. A section with no tag is always sent. The tag line itself is never sent.
 - When you add or move a tag, run the live scenarios (`FABULA_LIVE_SCENARIOS=1`, see `../README.md`): an instruction left out by mistake shows up as a worse answer, not as an error. `PROMPT_SLIM=off` sends everything again at once.

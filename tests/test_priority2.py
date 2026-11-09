@@ -96,6 +96,13 @@ def test_each_profile_gets_the_sections_its_requests_need_and_is_smaller():
     for p in (turn, play, setup):
         assert len(p) < len(full) * 0.93, "each profile must save at least 7 percent of the instructions"
         assert "<!--" not in p
+    # TLR-03-017: an ordinary request carries far less than the whole, and checking a sheet carries the least
+    check = sys("check")
+    assert len(play) < len(full) * 0.8 and len(setup) < len(full) * 0.65 and len(check) < len(full) * 0.45, (len(full), len(play), len(setup), len(check))
+    assert "DOCUMENT 2: ORACLES" not in check and "DOCUMENT 2: ORACLES" in play
+    assert "Character intake and validation" in check and "### 4.2 Characters" in check and "### 6.6 The `validation` block" in check
+    assert "### 8. Arbitrating" not in play and "## 8. Arbitrating conflicting actions" in turn
+    assert "## 4. Core mechanics" in play and "## 4. Core mechanics" not in setup and "## 4. Core mechanics" not in check
     for marker in ("DOCUMENT 1: PROTOCOL", "DOCUMENT 2: ORACLES", "DOCUMENT 3: STATE CONTRACT", "DOCUMENT 4: THE RULESET"):
         assert marker in play
 
@@ -111,7 +118,7 @@ def test_the_engine_sends_the_profile_of_the_request(monkeypatch):
     play_system, turn_system = gm.calls[0][0], gm.calls[1][0]
     assert "### 5.3 Autonomous actions" in play_system and "### 5.2 `resolve_turn` mode" not in play_system
     assert "### 5.2 `resolve_turn` mode" in turn_system and "### 5.3 Autonomous actions" not in turn_system
-    assert Engine._profile("intake", {"kind": "join"}) == "setup" and Engine._profile("intake", {"kind": "character_submission"}) == "setup"
+    assert Engine._profile("intake", {"kind": "join"}) == "setup" and Engine._profile("intake", {"kind": "character_submission"}) == "check"
     assert Engine._profile("intake", {"kind": "action"}) == "play" and Engine._profile("resolve_turn", None) == "turn"
     monkeypatch.setattr(config, "PROMPT_SLIM", False)
     assert Engine._profile("intake", {"kind": "action"}) is None

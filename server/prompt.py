@@ -18,7 +18,8 @@ def _static(profile=None, flags=()):
     parts = [
         HEADER,
         "# DOCUMENT 1: PROTOCOL\n\n" + doc("protocol.md"),
-        "# DOCUMENT 2: ORACLES\n\n" + doc("oracles.md"),
+        # the oracles (random tables for improvising and generating) are of no use when only a character sheet is checked
+        *([] if profile == "check" else ["# DOCUMENT 2: ORACLES\n\n" + doc("oracles.md")]),
         "# DOCUMENT 3: STATE CONTRACT\n\n" + doc("state_and_messages.md"),
     ]
     return "\n\n=====\n\n".join(parts)
