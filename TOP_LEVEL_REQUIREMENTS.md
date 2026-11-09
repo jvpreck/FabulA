@@ -88,6 +88,8 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-07-006-Pending** Fixed guidance for the client (narration rules, tool help) is sent once per session or when it changes, not with every result.
 - **TLR-07-007-Pending** A result carries only the changes since the client's last sync, unless the client asks for a full resync.
 - **TLR-07-008-Pending** Results state how long the narration should be, so clients do not produce more text than the game needs.
+- **TLR-07-010-Pending** The verbosity of the client's narration is a setting the player can configure: `medium` by default, `low` or `high`. The server delivers it with each result, so every client narrates to the same level.
+- **TLR-07-011-Pending** Everything about the game world is narrated, not listed: when a player asks about an NPC, a place or an object, the client answers in the voice of the story (from the facts it holds) and does not hand over the data plainly. Everything about the game mechanics (rolls, pools, abilities, rules, time left; a Difficulty is never shown) is stated plainly outside the narration blocks.
 - **TLR-07-009** If the AI Master is busy or over its limits, the player is told clearly what was queued and when to expect the answer. Nothing is lost.
 
 ## 08. Operation and cost

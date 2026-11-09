@@ -59,7 +59,7 @@ Steps:
 
 The text uses three top-level parts, each starting with a heading line exactly like this:
 
-- `# PART A: ...` is **player-safe**: pregenerated characters (full sheets), the premise, handouts that are given at the start, and party-scaling notes.
+- `# PART A: ...` is **player-safe**: pregenerated characters (full sheets, each with a `Fears` line, so that nobody has to be asked), the premise, handouts that are given at the start, and party-scaling notes.
 - `# PART B: ...` is **GM only**: setup parameters, the truth, hazard parameters, the cast, the places, the timeline and clock, the clue matrix (three routes per conclusion, floating clues), antagonist reactions, evidence and outside help, the finale (beats, warnings, ways through), endings and epilogue, difficulty sheet, handouts, era notes, and asynchronous parameters (recommended turn span and number of turns, scheduled events, how the finale is stepped, hook variants for extra characters).
 - `# PART C: ...` is **GM only**: the id tables for NPCs and locations.
 

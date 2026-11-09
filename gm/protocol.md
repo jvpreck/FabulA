@@ -118,11 +118,10 @@ The server creates the game and sends you `game_created`. Ask through `prompts` 
 **Personal settings** (every player, stored in the character once it exists, or in `game.setup.answers` until then):
 
 6. **Language** of their results.
-7. **Fears.** Optionally one or two things their character would dread. These feed any distortion module. If a player declines, draw only from the story's own elements.
-8. **Sources of support** that the ruleset asks for, if any.
-9. **Standing orders.** What the character does when the player misses a turn. Offer the default: stay safe, rest, take no risks.
+7. **Sources of support** that the ruleset asks for, if any.
+8. **Standing orders.** What the character does when the player misses a turn. Offer the default: stay safe, rest, take no risks.
 
-Dice are always server dice, so there is no dice question. The stop signal (`pause`) is always available (§3), so do not ask the player to confirm it.
+**Fears are not asked in setup** (it would cost the player a request by itself). A pregenerated character brings its own fears (§4.2); for a generated or provided character the player's client asks in the character conversation, as an option. Dice are always server dice, so there is no dice question. The stop signal (`pause`) is always available (§3), so do not ask the player to confirm it.
 
 **Gating.** Setup ends when the host and every joined player have answered, or when `game.settings.setup_deadline` passes. After the deadline, apply defaults and say so in the facts. Confirm the final settings to each player in two or three plain sentences. Treat silence for one turn as a yes. New players may join during `setup` and `characters`. After `active` begins they join as late joiners (§4.5).
 
@@ -132,7 +131,7 @@ Dice are always server dice, so there is no dice question. The stop signal (`pau
 Each player chooses one route (`character_submission`):
 
 - **Generate** a character: the player's client builds it from a work package and the server sends you the draft with `generated_locally: true`. You cross-check it (see below). A request without that flag asks you to build the character with the player, using the ruleset's creation steps.
-- **Select a pregenerated** character: the adventure's, or ones you generate on demand following the ruleset.
+- **Select a pregenerated** character: the adventure's, or ones you generate on demand following the ruleset. Every pregenerated character has fears (the adventure's `Fears` line in its sheet or seed; one you generate gets one or two that fit its background and the story). Put them in `settings.safety.fears` when you create the record, so the player is never asked.
 - **Provide a sheet** in any format, which the player's client converts and you cross-check against the ruleset's validation checklist.
 - **From an NPC**, only as a replacement (§6.5).
 
@@ -469,7 +468,7 @@ The adventure's markdown has three parts, each starting with a top-level heading
 
 1. **Front matter or record data:** id, title, ruleset id, players (min and max), recommended settings, era and place, language.
 2. **Setup parameters:** format, tone, modules switched on, default sources of support.
-3. **Character sheets** (player-safe part): pregenerated characters with all the ruleset requires.
+3. **Character sheets** (player-safe part): pregenerated characters with all the ruleset requires, each with a `Fears` line (one or two things the character dreads).
 4. **Premise and hook:** the letters, call or event that draws the characters in, with handouts.
 5. **The Truth:** the explanation of everything, written plainly and first.
 6. **Hazard parameters,** if the ruleset's modules need them.

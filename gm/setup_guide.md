@@ -105,7 +105,7 @@ When a character dies you stay **in the same game**. The server offers a replace
 
 - **The server is the truth.** If the chat is compacted or you switch device, Claude rebuilds everything from the server. Keep your player key.
 - **Secrets.** The Master keeps the adventure's secrets. Claude only turns the Master's facts into narration and never invents events. If a rule or a secret is unknown, you are told "nothing you have seen tells you that yet".
-- **Safety.** There are no lines or veils: all content is possible, because every player is an adult. You can name your character's **fears**. You can say **pause** at any moment. After intense scenes the game checks in out of character.
+- **Safety.** There are no lines or veils: all content is possible, because every player is an adult. Pregenerated characters come with their own **fears**; for a character you build you can name them. You can say **pause** at any moment. After intense scenes the game checks in out of character.
 - **PvP.** The game's stance is `none`, `soft` (default: characters may oppose each other, but nothing lethal or permanent happens between players) or `full`. Each player can also opt out in their safety settings.
 - **Standing orders.** Short rules for what your character does when you are away (how much risk to take, what never to do, how to reply to messages). They are always obeyed in your absence.
 - **Messages.** Letters, calls and other messages between characters are delivered by the story: they can take time and can be intercepted.
