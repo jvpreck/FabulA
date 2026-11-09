@@ -18,6 +18,13 @@ def others_here(character: dict, characters: list):
     return out
 
 
+def verbosity(game: dict, character: dict) -> str:
+    """How much the player of this character wants narrated: low, medium (the default) or high. Stored on the player's seat in the game."""
+    r = next((r for r in (game.get("roster") or []) if r.get("player_id") == character.get("player_id")), None) or {}
+    v = r.get("narration_verbosity")
+    return v if v in ("low", "medium", "high") else "medium"
+
+
 def sync_block(game: dict, character: dict, characters: list) -> dict:
     clock = game.get("clock") or {}
     kn = character.get("knowledge") or {}
@@ -37,6 +44,7 @@ def sync_block(game: dict, character: dict, characters: list) -> dict:
         },
         "knowledge": copy.deepcopy(kn),
         "settings": copy.deepcopy(character.get("settings")),
+        "narration": {"verbosity": verbosity(game, character)},
         "recent_events": (character.get("events") or [])[-15:],
         "decisions": character.get("decisions", []),
         "pending": {

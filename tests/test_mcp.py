@@ -3,7 +3,7 @@ import json
 
 from server.app import build_mcp, client_instructions
 
-EXPECTED = {"register_player", "get_setup_guide", "start_here", "get_guide", "import_ruleset", "list_games", "list_adventures", "list_seeds", "list_takeovers", "generate_adventure", "create_game", "join_game", "generate_character", "submit_action",
+EXPECTED = {"register_player", "get_setup_guide", "start_here", "get_guide", "import_ruleset", "list_games", "list_adventures", "list_seeds", "list_takeovers", "generate_adventure", "create_game", "join_game", "set_narration", "generate_character", "submit_action",
             "get_results", "get_character", "get_rules", "save_story_summary", "submit_package", "list_images", "get_image", "set_game_options"}
 
 

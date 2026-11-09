@@ -28,6 +28,11 @@ def _seconds_left(game, now):
     return max(0, int((datetime.fromisoformat(closes.replace("Z", "+00:00")) - now).total_seconds()))
 
 
+# TLR-07-011: what the client does with the answer. The world is narrated; the mechanics are stated plainly, outside the narration.
+PRESENTATION = {"inventory": "narrate", "location": "narrate", "relationships": "narrate", "knowledge": "narrate", "messages": "narrate", "others": "narrate",
+                "conditions": "narrate", "time": "plain", "sheet": "plain", "threads": "plain", "settings": "plain"}
+
+
 def answer(topic, game, character, characters, now, span_blocks):
     """The answer for `topic` (a key of TOPICS), or None if the topic is unknown."""
     c = character
@@ -64,5 +69,5 @@ def answer(topic, game, character, characters, now, span_blocks):
                                 "in_the_same_place": o["id"] in here}
                                for o in characters if o["id"] != c["id"]]}
     if topic == "settings":
-        return {"settings": copy.deepcopy(c.get("settings")), "language": c.get("language")}
+        return {"settings": copy.deepcopy(c.get("settings")), "language": c.get("language"), "narration_verbosity": redact.verbosity(game, c)}
     return None

@@ -137,9 +137,16 @@ def register(mcp, engine: Engine):
 
     @mcp.tool()
     @_safe
-    def join_game(player_key: str, game_id: str, display_name: str = "", language: str = "") -> dict:
-        """Join an existing game by its id."""
-        return engine.join_game(engine.authenticate(player_key), game_id, display_name or None, language or None)
+    def join_game(player_key: str, game_id: str, display_name: str = "", language: str = "", narration_verbosity: str = "") -> dict:
+        """Join an existing game by its id. narration_verbosity (low, medium or high, optional, default medium) is how much the player wants narrated."""
+        return engine.join_game(engine.authenticate(player_key), game_id, display_name or None, language or None, narration_verbosity or None)
+
+    @mcp.tool()
+    @_safe
+    def set_narration(player_key: str, verbosity: str, game_id: str = "") -> dict:
+        """The player's own choice of how much the client narrates: low, medium (default) or high. With game_id it applies to that game only; without,
+        to the games the player creates or joins from now on. It belongs to the player, not to a character."""
+        return engine.set_narration(engine.authenticate(player_key), verbosity, game_id or None)
 
     @mcp.tool()
     @_safe
