@@ -5,7 +5,7 @@ import json
 
 from mcp.server.fastmcp import Image
 
-from .engine import Engine, EngineError, GeminiTrouble
+from .engine import AIMasterBusy, Engine, EngineError, GeminiTrouble
 from .db import Conflict
 from .files import AdventureSourceError
 
@@ -31,6 +31,10 @@ def _safe(fn):
             return {"error": str(e), "gemini_unavailable": True, "retry_in_minutes": 5,
                     "next_step": "Tell the player plainly that there are problems with Gemini (the AI Master's model), that nothing was lost "
                                  "or changed, and to try the same thing again in a few minutes. Do not retry in a loop and do not invent a result."}
+        except AIMasterBusy as e:
+            return {"error": str(e), "ai_master_busy": True, "retry_in_minutes": 2,
+                    "next_step": "Tell the player plainly that the AI Master has used its request quota for now, that nothing was lost or changed, and to try "
+                                 "the same thing again in a couple of minutes. An action can still be sent: it is saved for the turn close. Do not retry in a loop."}
         except EngineError as e:
             return {"error": str(e), "next_step": _next_step(str(e))}
         except AdventureSourceError as e:

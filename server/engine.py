@@ -65,6 +65,10 @@ GEMINI_TROUBLE_MESSAGE = ("The AI Master's model (Google Gemini) is not answerin
                           "Nothing was lost and nothing was changed.")
 
 
+class AIMasterBusy(EngineError):
+    """The AI Master's request quota is used up for now (nothing was sent). The player is told when to try again."""
+
+
 class GeminiTrouble(EngineError):
     """Gemini is down or overloaded. The player has to be told so (the message says what to say)."""
 
@@ -308,7 +312,7 @@ class Engine:
                     resp = parse(self.gm.call(system, json.dumps(env, ensure_ascii=False), tier=tier))
                 except GMBusy as e:
                     outcome = "failed"
-                    raise EngineError(str(e))
+                    raise AIMasterBusy(str(e))
                 except GMUnavailable as e:
                     outcome = "failed"
                     raise GeminiTrouble(e.reason)
@@ -1759,7 +1763,12 @@ class Engine:
         request = {"player_id": player_id, "character_id": cid, "kind": kind, "text": text, "payload": payload}
         phase_before = game["phase"]
         post = self._post_intake(kind, text, cid)
-        resp = self._run(ws, game_id, "intake", request, cid, post)
+        try:
+            resp = self._run(ws, game_id, "intake", request, cid, post)
+        except (GeminiTrouble, AIMasterBusy) as e:
+            if kind != "action" or phase_before != "active":
+                raise
+            return self._defer_action(player_id, game_id, cid, text, e)
         game = ws.get("game", game_id)
         if phase_before != "active" and game["phase"] == "active":
             self._start_game(ws, game)
@@ -1774,6 +1783,36 @@ class Engine:
                 extra["handling"] = "resolved_turn"
         ws = self._ws()
         return self._finish(ws, player_id, game_id, extra)
+
+    # ---- TLR-03-009 / 07-009 / 07-004: when the AI Master cannot answer (Gemini down, or over its quota), an `action` is not refused: it is saved
+    # as a level 4 action, unparsed, and the AI Master reads the player's own words at the turn close.
+    DEFERRED_MESSAGE = ("The AI Master could not answer right now ({why}), so the action was saved as written and will be resolved at the turn close, "
+                        "together with the other players' actions. Nothing was lost. Tell the player that, and when the turn closes.")
+
+    def _defer_action(self, player_id, game_id, character_id, text, error):
+        ws = self._ws()
+        game = self._game(ws, game_id)
+        sa = ws.get("submit_action", f"{game_id}:{game['clock']['turn']}")
+        c = self._character_for(ws, game, player_id, character_id)
+        if sa is None or c is None:
+            raise error
+        turn = game["clock"]["turn"]
+        rec = {"id": short("a"), "player_id": player_id, "submitted_at": iso(self.now()), "kind": "action", "raw_text": text, "parsed": None,
+               "needs_parse": True, "handling": "queued", "status": "queued", "supersedes": [], "clarifications": [],
+               "deferred_because": str(error)[:160]}
+        sa["actions"].setdefault(c["id"], []).append(rec)
+        c["turn_state"]["queued_action_ids"].append(rec["id"])
+        c["participation"]["last_submitted_turn"] = turn
+        c["participation"]["missed_turns"] = 0
+        if c["participation"]["status"] == "away":
+            c["participation"]["status"] = "active"
+        ws.touch("submit_action", f"{game_id}:{turn}")
+        ws.touch("character", c["id"])
+        ws.commit()
+        why = "its request quota is used up for now" if isinstance(error, AIMasterBusy) else "Gemini is not answering"
+        extra = {"handling": "queued", "deferred": True, "turn_closes_at": game["clock"].get("turn_closes"),
+                 "message": self.DEFERRED_MESSAGE.format(why=why)}
+        return self._finish(self._ws(), player_id, game_id, extra)
 
     def _post_intake(self, kind, text, cid):
         def post(ws, game, resp, by_id, applier):
