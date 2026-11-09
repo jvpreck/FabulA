@@ -47,6 +47,7 @@ summary: Lovecraftian investigative horror in the 1930s. Investigative abilities
 - **Characters:** 1 (solo) to 5. Each player controls one Investigator. GM-run allies never roll or decide for a player character.
 
 ### 2.1 Building an Investigator
+<!-- for: setup, check -->
 
 1. **Occupation** (§2.2). The Investigator may still work it, or have left it to hunt the Mythos full time (poorer and more isolated). In a one-shot the job usually is not quit yet.
 2. **Drive** (§2.3). Exactly one.
@@ -55,6 +56,7 @@ summary: Lovecraftian investigative horror in the 1930s. Investigative abilities
 5. **Contacts** (§2.6), name, background, equipment and means in the style of the era.
 
 ### 2.1a Build points
+<!-- for: setup, check -->
 
 | Characters at the start | Investigative points each |
 |---|---|
@@ -78,6 +80,7 @@ summary: Lovecraftian investigative horror in the 1930s. Investigative abilities
 - **Building a party.** Cover as many abilities as possible and give each Investigator a role in which to shine. Allow at most one combat expert and one occult or Mythos expert, each weakened somehow (a retiree, a washout, an untrustworthy mentor) [House].
 
 ### 2.2 Occupations
+<!-- for: setup, check -->
 
 Each Occupation lists its Occupational abilities (half price), a Credit Rating band and a special benefit. The adventure may ban Occupations or allow only some. Only **Military** is closed to women even in a realistic game; sexism of the era may appear as color and may make a character underestimated, never as a ban.
 
@@ -107,6 +110,7 @@ Each Occupation lists its Occupational abilities (half price), a Credit Rating b
 - **New Occupation [House].** A variant of an existing one swaps one or two abilities (Pilot becomes Sailor by trading Athletics for Driving). A wholly new Occupation has 7 to 9 Occupational abilities and never includes Credit Rating, Cthulhu Mythos, Health, Sanity or Stability. Its special rule is either privileged access to scenes and sources or one small mechanical tweak.
 
 ### 2.3 Drives
+<!-- for: setup, check -->
 
 Every Investigator has exactly one Drive: a core desire worth more than life or sanity. Any Drive fits any character; suggested pairings in parentheses.
 
@@ -140,17 +144,19 @@ How Drives cost and refresh Stability is in §5.3.
 - **A player who leaves** turns the character into a GM-run ally who stays safe or departs plausibly.
 
 ### 2.5 Pillars of Sanity and Sources of Stability
+<!-- for: setup, check -->
 
 - **Pillars of Sanity:** for every 3 full rating points of Sanity, one Pillar: an abstract principle the character trusts implicitly (not a person or an object). Examples: religious faith; family honor; human dignity; scientific progress; the laws of physics; the goodness of nature; the innate goodness of mankind; a moral code; high art; patriotism; love of a home town. A revelation that undermines a Pillar costs extra Sanity (§5.4).
 - **Sources of Stability** (module `sources_of_stability`, for campaigns with a soap-opera element): for every 3 full rating points of Stability, one named person who keeps the character sane (name and an identifying phrase; not another Investigator, though several Investigators may share one at a risk). Cultists and entities may use these people. If harm comes to one, the character faces hard Stability tests and may permanently lose the linked rating points. For a one-shot only one Source (a person) is set at the start, the others appear in play. With the module off, Stability simply refreshes between stories.
 
 ### 2.6 Contacts and the intimate correspondent
+<!-- for: turn, play, setup -->
 
 - Whenever a character uses Bureaucracy, Cop Talk, Credit Rating, Streetwise or any ability to call on a contact, the player supplies the contact's name, residence and connection. The size of the spend sets the contact's attitude, the value of the information and the position in the field. Essential clues are always free. The AI Master reuses contacts as recurring NPCs and may have them ask for favors, bring trouble or die badly.
 - **Intimate correspondent [optional].** A mentor, protégé, relative or clergyman to whom the character confides everything. If the Investigator dies or goes mad, that person is a briefed replacement seed.
 
 ### 2.7 Character intake and validation [House]
-<!-- for: setup -->
+<!-- for: setup, check -->
 
 | # | Check | Passes when |
 |---|---|---|
@@ -270,6 +276,7 @@ The asterisked abilities Disguise, Electrical Repair, Explosives and Mechanical 
 ---
 
 ## 4. Core mechanics
+<!-- for: turn, play -->
 
 ### 4.1 Clues
 - **Gathering is automatic.** The character must be in a scene where the information exists, have the right ability and say it is being used. The player may be specific ("Art History on the idol"), speculative ("Oral History to find the town drunk"; the AI Master may swap the planned source) or general ("Evidence Collection on the alley"). The ability need not be named.
@@ -376,12 +383,14 @@ Absent, paused and away characters are never taken to the bottom at any level (�
 - **Asynchronous play [House].** A Haven or a Source reconnect must be declared in the action; a long one costs a Block, a brief one none. The once-per-day limits still apply.
 
 ### 4.10 Improving an Investigator
+<!-- for: turn -->
 
 At the end of each case each player gets **2 build points per session played** (adjust for the number of turns in the story) to spend one for one on Investigative or General abilities, new or existing, or to reassign 1 or 2 points as atrophy. Never on Credit Rating, Cthulhu Mythos or Sanity. The AI Master may adjust Credit Rating for treasure, decoration, ruin. [Purist] nothing improves the Investigator, but reassigning points is allowed.
 
 ---
 
 ## 5. Stability, Sanity and the Mythos
+<!-- for: turn, play -->
 
 ### 5.1 The two scores
 
@@ -487,6 +496,7 @@ Lovecraftian magic is alien science, garbled knowledge, or a focus for psychic p
 ---
 
 ## 6. Solo and party play (asynchronous)
+<!-- for: turn, play, setup -->
 
 ### 6.1 Solo [House]
 1. **One viewpoint.** Every thread is narrated through the Investigator. No cutaways.
@@ -509,6 +519,7 @@ Lovecraftian magic is alien science, garbled knowledge, or a focus for psychic p
 7. **Group size.** Budgets come from the party size at the start (§2.1a).
 
 ### 6.3 Resolving conflicting actions [House]
+<!-- for: turn -->
 
 One world, one truth. Order first, dice second. Nobody's action is dropped.
 
@@ -526,6 +537,7 @@ One world, one truth. Order first, dice second. Nobody's action is dropped.
 12. **NPCs and the antagonist** act after the characters in each Block unless their schedule says otherwise.
 
 ### 6.4 Standing orders, absent and paused players [House]
+<!-- for: turn, play -->
 
 - **Standing orders** are stored in each character's record (`settings.standing_orders`): `hold` (where to stay and what to do when absent), `risk_tolerance` (`low`, `medium`, `high`), `default_spends` (for example Sense Trouble 1 each Block), `never_do` (a list) and `reply_to_messages`. The default: stay safe, rest, take no risks.
 - **A missed turn.** Apply the standing orders; with none, the character **holds**: stays put or goes to lodgings, rests, keeps routine, declines risky invitations and takes no irreversible or dangerous action. A task marked `continue until told` (a long archive search) continues.
@@ -536,6 +548,7 @@ One world, one truth. Order first, dice second. Nobody's action is dropped.
 ---
 
 ## 7. NPC statistics [House]
+<!-- for: turn, play -->
 
 NPCs have no full sheets. Record only what play needs.
 
@@ -558,6 +571,7 @@ NPCs have no full sheets. Record only what play needs.
 ---
 
 ## 8. Era, craft and campaigns
+<!-- for: turn, setup -->
 
 ### 8.1 The 1930s in play
 
