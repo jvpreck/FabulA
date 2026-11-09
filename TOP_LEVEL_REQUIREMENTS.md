@@ -20,6 +20,7 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-01-009-Pending** Level 2: the engine answers from the database without calling the AI Master and without using its quota (inventory, who is in the character's location, time left in the turn, messages, public status of others, speech between characters).
 - **TLR-01-010-Pending** Level 3: the AI Master resolves immediately any request that affects only the requesting character and touches nothing shared with other players (other characters, shared NPC or location state, contested objects).
 - **TLR-01-011-Pending** Level 4: a request that involves other players or shared state waits for the turn close and is resolved together with the others.
+- **TLR-01-013-Pending** There is no game setup phase. A game is created by one action (the host's settings, including how many players are expected) and each player creates a character with one action. A character whose check passes is confirmed by the server, and the game starts by itself when every player who joined, and as many as the host expects, have a confirmed character. The AI Master is called once to check the character and once to give the openings when the game starts.
 - **TLR-01-012-Pending** A player who has played enough for the turn can send the command "ready to pass turn". The engine records that status for the player's character. After it, the player can no longer send actions to the engine for that turn (they can only use what the client answers alone, level 1). When every active player has sent it, the engine may close the turn before the formal time.
 
 ## 02. Players and access
@@ -88,6 +89,8 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-07-006-Pending** Fixed guidance for the client (narration rules, tool help) is sent once per session or when it changes, not with every result.
 - **TLR-07-007-Pending** A result carries only the changes since the client's last sync, unless the client asks for a full resync.
 - **TLR-07-008-Pending** Results state how long the narration should be, so clients do not produce more text than the game needs.
+- **TLR-07-010-Pending** The verbosity of the client's narration is a setting of each player in each game (so different players of the same game may use different levels, and the same player may use another level in another game): `medium` by default, `low` or `high`. The player can change it at any time, and the server delivers it with each result so the client narrates to that level.
+- **TLR-07-011-Pending** Everything about the game world is narrated, not listed: when a player asks about an NPC, a place or an object, the client answers in the voice of the story (from the facts it holds) and does not hand over the data plainly. Everything about the game mechanics (rolls, pools, abilities, rules, time left; a Difficulty is never shown) is stated plainly outside the narration blocks.
 - **TLR-07-009** If the AI Master is busy or over its limits, the player is told clearly what was queued and when to expect the answer. Nothing is lost.
 
 ## 08. Operation and cost

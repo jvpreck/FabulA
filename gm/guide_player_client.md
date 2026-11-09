@@ -20,7 +20,7 @@ title: Player client guide, how to use FabulA
 | 3 | `create_game` or `join_game` | `create_game` returns a work package |
 | 4 | `generate_character` | Routes: `generate`, `provided` (the player's own sheet) return a work package; `pregen` and `from_npc` act at once |
 | 5 | `submit_package` | Sends back the finished package |
-| 6 | `submit_action` with `kind: "character_confirm"` | The player approves their character |
+| 6 | `submit_action` with `kind: "character_confirm"` | Only when the check passed with adjustments: the player approves them |
 | 7 | `get_results`, `submit_action` | The play loop |
 | any | `get_character`, `save_story_summary`, `list_images`, `get_image`, `get_rules` | Support |
 
@@ -47,7 +47,7 @@ title: Player client guide, how to use FabulA
 - Making up facts, rolls, clues or outcomes. Narrate only what the server returns.
 - Showing GM-only text from a package to the player.
 - Submitting a package with extra fields, or a different shape from `submission.schema`. Extra fields are dropped.
-- Skipping `character_confirm`. A character cannot play until the player confirms it.
+- Asking the player to confirm a character that already passed its check: the server confirms it. `character_confirm` is only for adjustments.
 - Forgetting that time runs in turns: not every action gets an answer at once.
 
 ## Languages

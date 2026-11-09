@@ -26,6 +26,8 @@ summary: A fictional fixture used only by the automated tests. It is not a real 
 
 A test character. Nothing here matters.
 
+- **Fears:** being locked in; being disbelieved.
+
 # PART B: THE ADVENTURE (GM ONLY)
 
 ## 1. The truth

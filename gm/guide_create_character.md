@@ -29,4 +29,4 @@ To continue in the same game after a death, pass `replaces_character_id`.
 
 ## Confirm
 
-When the server accepts the sheet, show the validation summary and ask the player to confirm the character: `submit_action(player_key, game_id, kind="character_confirm", payload={"approved": true})`. Only then is the character in play. The server's reply says what happens next (other players, the start of the first turn, or an immediate scene if playing alone).
+When the server accepts the sheet and the check passes, the character is confirmed at once: show the validation summary and the server's reply, which says what happens next (the opening scene if playing alone, or waiting for the other players). Only if the check passed with adjustments does the player approve them: `submit_action(player_key, game_id, kind="character_confirm", payload={"approved": true})`.
