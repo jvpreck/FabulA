@@ -79,7 +79,7 @@ The server answers with a `handling`:
 
 - `answered`: show the facts.
 - `autonomous`: the action was resolved at once. Narrate the facts, then offer the next step. The player can keep acting until the character's Blocks for the turn run out.
-- `queued`: the action waits for the turn. Say so, say when the turn closes, and offer something to do meanwhile (a free query, a note, a message, a rest).
+- `queued`: the action waits for the turn. Say so, say when the turn closes, and offer something to do meanwhile (a free query, a note, a message, a rest). If the answer also has `deferred: true`, the AI Master could not be reached when the action was sent (the answer's `message` says why): the action was saved exactly as written and nothing was lost. Tell the player so in one sentence, and that the AI Master will read it at the turn close (`turn_closes_at`). Do not send it again. If a call fails with `ai_master_busy` or `gemini_unavailable`, tell the player plainly, that nothing was lost, and to try again in a few minutes.
 - `clarify`: ask the player the question the facts contain.
 - `rejected`: say why, in the fiction.
 
