@@ -20,6 +20,7 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-01-009-Pending** Level 2: the engine answers from the database without calling the AI Master and without using its quota (inventory, who is in the character's location, time left in the turn, messages, public status of others, speech between characters).
 - **TLR-01-010-Pending** Level 3: the AI Master resolves immediately any request that affects only the requesting character and touches nothing shared with other players (other characters, shared NPC or location state, contested objects).
 - **TLR-01-011-Pending** Level 4: a request that involves other players or shared state waits for the turn close and is resolved together with the others.
+- **TLR-01-012-Pending** A player who has played enough for the turn can send the command "ready to pass turn". The engine records that status for the player's character. After it, the player can no longer send actions to the engine for that turn (they can only use what the client answers alone, level 1). When every active player has sent it, the engine may close the turn before the formal time.
 
 ## 02. Players and access
 - **TLR-02-001** Each player uses their own AI client (Claude, ChatGPT, Grok or others) through an MCP custom connector. The engine needs no other front end.
@@ -40,14 +41,16 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-03-006** An invalid AI response is rejected as a whole and retried, and no partial result is stored.
 - **TLR-03-007-Pending** The client declares the structured request (type and targets) and the level it expects. The server decides the level by fixed rules over the request and the game data, and the final level may be higher or lower than the client expected.
 - **TLR-03-008-Pending** The AI Master may change the level of a request in either direction when its content requires judgment. The player is told the reason.
-- **TLR-03-009-Pending** If the AI Master is unavailable or over its limits, a level 3 request is queued as level 4 instead of failing.
+- **TLR-03-009** If the AI Master is unavailable or over its limits, a level 3 request is queued as level 4 instead of failing.
 - **TLR-03-010** The context sent to the AI Master is limited to what the request type needs. A level 3 request does not carry the instructions, entities or history that only a turn close needs.
 - **TLR-03-011-Pending** The static parts of the AI Master's instructions are reused across requests and games, so repeated input is billed and processed at the lowest cost the provider offers.
 - **TLR-03-012** The state snapshot for a request includes only the NPCs, locations and history relevant to the requesting character or the scene. A turn close includes everything involved in the turn.
 - **TLR-03-013-Pending** Older events and messages are condensed into a rolling digest, so the context size stays bounded however long the game runs.
-- **TLR-03-014-Pending** The request sent to the AI Master is serialized compactly, and the number of server-rolled dice is proportional to what the request can need.
+- **TLR-03-014** The request sent to the AI Master is serialized compactly, and the number of server-rolled dice is proportional to what the request can need.
 - **TLR-03-015-Pending** The AI Master's answers must follow a declared structure that the provider enforces, so a malformed answer is rare. Retries are counted and reported.
 - **TLR-03-016** Changes to the AI Master's instructions are checked against a set of recorded scenarios before release. The checks cover valid structure, secrecy (nothing hidden reaches a player) and rules fidelity.
+- **TLR-03-017-Pending** The fixed instructions sent with each request are limited to what that kind of request needs. An ordinary request of one character carries far less than the turn close (a target of at most 20,000 tokens, against about 56,000 now), so more requests fit in the provider's per-minute token limit and each is answered faster.
+- **TLR-03-018-Pending** The AI Master's thinking effort follows the request: the lowest level for questions and simple requests, a higher one for actions that need judgment and for the turn close. The effect on answer time and quality is measured before a level is made the default.
 
 ## 04. Characters
 - **TLR-04-001** A player can generate a character, choose a pregenerated one, supply their own for validation, or take over an NPC.
@@ -80,12 +83,12 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-07-001** Creative work (character, game settings, adventure) is done as work packages in the player's own client. The server validates the result and returns the problems to fix.
 - **TLR-07-002** After each result the client shows the narration, notebook, status, available illustrations and next possible actions.
 - **TLR-07-003** Illustrations are optional per game and consistent in style. Each is visible only to the characters who could see it, delivered as short-lived links.
-- **TLR-07-004-Pending** The client tells the player when a request was queued, and that the answer arrives at the turn close.
+- **TLR-07-004** The client tells the player when a request was queued, and that the answer arrives at the turn close.
 - **TLR-07-005-Pending** Before answering a time-sensitive question locally, the client refreshes its synced data from the engine.
 - **TLR-07-006-Pending** Fixed guidance for the client (narration rules, tool help) is sent once per session or when it changes, not with every result.
 - **TLR-07-007-Pending** A result carries only the changes since the client's last sync, unless the client asks for a full resync.
 - **TLR-07-008-Pending** Results state how long the narration should be, so clients do not produce more text than the game needs.
-- **TLR-07-009-Pending** If the AI Master is busy or over its limits, the player is told clearly what was queued and when to expect the answer. Nothing is lost.
+- **TLR-07-009** If the AI Master is busy or over its limits, the player is told clearly what was queued and when to expect the answer. Nothing is lost.
 
 ## 08. Operation and cost
 - **TLR-08-001** The engine runs on free or low-cost tiers (Vercel, Supabase, Gemini, Cloudflare), with guards against exceeding their limits.
