@@ -48,7 +48,7 @@ title: Player client guide, how to use FabulA
 - Showing GM-only text from a package to the player.
 - Submitting a package with extra fields, or a different shape from `submission.schema`. Extra fields are dropped.
 - Asking the player to confirm a character that already passed its check: the server confirms it. `character_confirm` is only for adjustments.
-- Forgetting that time runs in turns: not every action gets an answer at once.
+- Forgetting that time runs in turns: not every action gets an answer at once. When the player is done for the turn, offer `submit_action` `kind: "ready"`: when every player is ready the turn closes early.
 
 ## Languages
 

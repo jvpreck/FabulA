@@ -31,7 +31,8 @@ def sync_block(game: dict, character: dict, characters: list) -> dict:
     return {
         "version": (character.get("client_sync") or {}).get("version", 0),
         "time": {"turn": clock.get("turn"), "day": clock.get("day"), "block": clock.get("block"),
-                 "turn_closes": clock.get("turn_closes")},
+                 "turn_closes": clock.get("turn_closes"),
+                 "ready_to_pass": (character.get("participation") or {}).get("ready_turn") == clock.get("turn") and game.get("phase") == "active"},
         "character": {
             "id": character["id"], "name": character.get("name"), "is_alive": character.get("is_alive", True),
             "status": character.get("status"), "language": character.get("language"),

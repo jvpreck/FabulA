@@ -33,6 +33,11 @@ PRESENTATION = {"inventory": "narrate", "location": "narrate", "relationships": 
                 "conditions": "narrate", "time": "plain", "sheet": "plain", "threads": "plain", "settings": "plain"}
 
 
+def _ready(game, c):
+    """TLR-01-012: the character has told the engine it is ready to pass this turn."""
+    return (c.get("participation") or {}).get("ready_turn") == (game.get("clock") or {}).get("turn") and game.get("phase") == "active"
+
+
 def answer(topic, game, character, characters, now, span_blocks):
     """The answer for `topic` (a key of TOPICS), or None if the topic is unknown."""
     c = character
@@ -42,7 +47,8 @@ def answer(topic, game, character, characters, now, span_blocks):
         used = list((c.get("turn_state") or {}).get("blocks_used") or [])
         return {"turn": clock.get("turn"), "day": clock.get("day"), "block": clock.get("block"), "turn_closes": clock.get("turn_closes"),
                 "seconds_left": _seconds_left(game, now), "blocks_used": used, "blocks_left": max(0, span_blocks - len(used)),
-                "turn_span": (game.get("settings") or {}).get("turn_span")}
+                "turn_span": (game.get("settings") or {}).get("turn_span"),
+                "ready_to_pass": _ready(game, c)}
     if topic == "inventory":
         return {"inventory": copy.deepcopy(c.get("inventory", [])), "means": c.get("means")}
     if topic == "sheet":
@@ -66,7 +72,7 @@ def answer(topic, game, character, characters, now, span_blocks):
     if topic == "others":
         here = {o["character_id"] for o in redact.others_here(c, characters)}
         return {"characters": [{"character_id": o["id"], "name": o.get("name"), "is_alive": o.get("is_alive", True), "status": o.get("status"),
-                                "in_the_same_place": o["id"] in here}
+                                "in_the_same_place": o["id"] in here, "ready_to_pass": _ready(game, o)}
                                for o in characters if o["id"] != c["id"]]}
     if topic == "settings":
         return {"settings": copy.deepcopy(c.get("settings")), "language": c.get("language"), "narration_verbosity": redact.verbosity(game, c)}
