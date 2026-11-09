@@ -168,7 +168,8 @@ def register(mcp, engine: Engine):
         say (speak to a character in the same place; payload {to, whisper}), setup_answers (payload {answers}),
         character_submission, character_confirm (payload {approved}), standing_orders (payload {standing_orders, safety}),
         thread_note (payload {type, text}), message (payload {to, channel, text}), decision (payload {prompt_id, choice}),
-        free_query, pause, resume (payload {choice}). Minor actions that affect only your character are resolved at once;
+        free_query (payload {topic} for what the server knows: time, inventory, sheet, conditions, location, relationships, threads, knowledge,
+        messages, others, settings; answered at once from the database without the AI Master), pause, resume (payload {choice}). Minor actions that affect only your character are resolved at once;
         the rest wait for the turn. Returns the results now available to you.
         request_id: a fresh unique id (for example a short random string) for each new request, sent again unchanged if you must retry after
         a timeout or an error you did not see the answer to. The same request_id is processed once; the retry returns the first answer."""
