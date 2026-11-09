@@ -381,8 +381,30 @@ class Engine:
                 entry["gm_degraded"] = last["degraded"]
             ws.touch("game", game_id)
 
+    VALID_RESULTS = ("pass", "pass_with_adjustments", "fail")
+
+    @classmethod
+    def _require_validation(cls, request, resp):
+        """A character check must end in a verdict. The light model sometimes answers a check with an empty `validation` and no results
+        (it wrote only a private note), which left the draft stuck with nothing to tell the player. Such an answer is sent back to the
+        AI Master with the reason, like any other answer the server cannot use (nothing is applied)."""
+        if (request or {}).get("kind") != "character_submission":
+            return
+        v = resp.get("validation")
+        if not isinstance(v, dict) or v.get("result") not in cls.VALID_RESULTS:
+            raise ap.ApplyError(
+                "this is a character_submission, so the response must include `validation` with `result` (pass, pass_with_adjustments or fail) "
+                "and `checks` (one entry per row of the ruleset's checklist, state contract section 6.6), and a `results` item for the character "
+                "in the player's language that says what was checked and what must change. Your response had no usable `validation`.")
+        if v["result"] != "pass" and not v.get("checks"):
+            raise ap.ApplyError("`validation.result` is " + str(v["result"]) + " but `validation.checks` is empty: list every check that is not a "
+                                "pass, each with its `n`, `name`, `result` and a short `note` the player can act on.")
+        cid = ((request.get("payload") or {}).get("character_id")) or request.get("character_id")
+        v.setdefault("character_id", cid)  # the draft being checked, when the model leaves it out
+
     def _apply(self, ws, game_id, mode, resp, request, post, store_in_turn):
         game = ws.get("game", game_id)
+        self._require_validation(request, resp)
         a = ap.Applier(ws, game_id, mode, iso(self.now()))
         a.snapshot_alive(ws.load_game_characters(game_id))
         pre_met = self._met_map(ws, game_id)
@@ -1766,6 +1788,11 @@ class Engine:
             if sa is None:
                 raise ap.ApplyError("no open turn to store the action in")
             a = resp.get("action") or {}
+            parsed = a.get("parsed")
+            if not isinstance(parsed, dict) or not any(v for v in parsed.values()):
+                raise ap.ApplyError(  # stored empty it would be resolved as nothing at the turn
+                    "an `action` request handled as queued or autonomous must return `action.parsed` (state contract 3.7: blocks, share, messages, "
+                    "tasks and so on) with what the player asked for. Yours had none.")
             rec = {"id": short("a"), "player_id": by_id[cid]["player_id"], "submitted_at": iso(self.now()), "kind": "action",
                    "raw_text": text, "parsed": a.get("parsed"), "handling": handling,
                    "status": "resolved_now" if handling == "autonomous" else "queued",

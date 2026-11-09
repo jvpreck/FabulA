@@ -1,76 +1,134 @@
-"""The shape of the AI Master's response (state contract §6), as a JSON schema (TLR-03-015).
+"""The shape of the AI Master's response (state contract section 6), as a JSON schema (TLR-03-015).
 
-NOT SWITCHED ON (GEMINI_STRUCTURED_OUTPUT is off by default). The provider fills an object that has no declared `properties` with an empty
-`{}`: with this schema `validation`, `action`, `events`, `decisions`, `messages` and `dice_log` come back empty and `state_changes` entries can
-carry only op, entity and id (no `patch`, `path` or `doc`). A character check then ends without a verdict. Before this is switched on again every
-object the contract defines must be declared in full (state contract sections 6.2 to 6.7), and the live scenarios must check that those fields arrive.
+With GEMINI_STRUCTURED_OUTPUT on, Gemini is asked to produce exactly this shape (`response_json_schema`).
 
-Gemini is asked to produce exactly this shape (`response_json_schema`), so a malformed answer is rare. The schema fixes the containers
-(object, list), the `status` values and the fields every result item needs; it does not fix the contents of state changes, events or
-facts, which `apply.py` still validates. It is deliberately permissive: a schema stricter than the contract would reject good answers.
+The lesson of 2026-11-08, which this file is built around: an object declared WITHOUT `properties` and WITHOUT `additionalProperties` is
+filled with an empty `{}` by the provider (live probe: a `patch` came back empty and the `validation` key was dropped). Every object that
+holds content the contract does not fix key by key (a `patch`, a `doc`, `parsed`, a result item's extras) is therefore declared with
+`additionalProperties: true`, and the objects the contract does fix (the validation block, events, decisions, messages, dice, result items,
+illustrations, portraits) declare their keys. A value that may be a string or an object (`doc`) is the empty schema `{}` (anything).
+Optional values the contract lets be null say so with a type list (`["string", "null"]`).
+
+`tests/test_priority1.py` walks this schema and fails if any object lacks both `properties` and `additionalProperties`.
 `check()` is a small validator for this subset, used by the scenario checks (tests/test_scenarios.py), so no extra package is needed."""
 
-_OBJ = {"type": "object"}
-_LIST_OF_OBJECTS = {"type": "array", "items": _OBJ}
+import copy
+import json
 
-RESULT_ITEM = {
-    "type": "object",
-    "properties": {
-        "kind": {"type": "string", "enum": ["own", "witness", "message", "speech", "system"]},
-        "language": {"type": "string"},
-        "facts": {"type": "array", "items": {"type": "object", "properties": {"kind": {"type": "string"}, "text": {"type": "string"}},
-                                              "required": ["text"]}},
-        "prompts": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "type": {"type": "string"},
-                                                                                 "text": {"type": "string"}, "options": {"type": "array"}},
-                                                "required": ["id", "type", "text"]}},
-        "roll_report": _LIST_OF_OBJECTS,
-        "spend_offers": _LIST_OF_OBJECTS,
-        "ally_advice": _LIST_OF_OBJECTS,
-        "narration_hints": _OBJ,
-    },
-    "required": ["kind", "facts"],
-}
+FREE = {"type": "object", "additionalProperties": True}  # an object whose content the contract does not fix
+ANY = {}  # any JSON value
+STR = {"type": "string"}
+NSTR = {"type": ["string", "null"]}
+INT = {"type": "integer"}
+NINT = {"type": ["integer", "null"]}
+NUM = {"type": "number"}
+STRS = {"type": "array", "items": STR}
 
-RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "status": {"type": "string", "enum": ["ok", "needs_dice", "error"]},
-        "mode": {"type": "string"},
-        "game_id": {"type": "string"},
-        "handling": {"type": "string", "enum": ["answered", "queued", "autonomous", "clarify", "rejected", "resolved_turn"]},
-        "results": {"type": "object", "additionalProperties": {"type": "array", "items": RESULT_ITEM}},
-        "shared_digest": _LIST_OF_OBJECTS,
-        "state_changes": {"type": "array", "items": {"type": "object", "properties": {
-            "op": {"type": "string", "enum": ["upsert", "merge", "adjust", "append", "remove"]},
-            "entity": {"type": "string", "enum": ["game", "character", "npc_state", "location_state", "npc", "location"]},
-            "id": {"type": "string"}}, "required": ["op", "entity", "id"]}},
-        "events": _LIST_OF_OBJECTS,
-        "decisions": _LIST_OF_OBJECTS,
-        "messages": _LIST_OF_OBJECTS,
-        "dice_log": _LIST_OF_OBJECTS,
-        "illustrations": _LIST_OF_OBJECTS,
-        "portraits": _LIST_OF_OBJECTS,
-        "gm_notes": {"type": "string"},
-        "validation": {"type": "object", "nullable": True},  # the contract allows null (section 6.2)
-        "action": {"type": "object", "nullable": True},
-        "errors": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["status"],
-}
+
+def obj(properties, required=(), extra=True):
+    """An object that declares its keys; other keys are allowed unless extra is False."""
+    out = {"type": "object", "properties": properties, "additionalProperties": extra}
+    if required:
+        out["required"] = list(required)
+    return out
+
+
+FACT = obj({"block": NSTR, "kind": STR, "text": STR}, ["text"])
+PROMPT = obj({"id": STR, "type": STR, "text": STR, "options": {"type": "array", "items": ANY}}, ["id", "type", "text"])
+# Only the keys the server and the player depend on are declared. The provider refuses a schema that is too large (a bare 400 INVALID_ARGUMENT:
+# the full result item with roll_report, narration_hints and the rest, plus the action parse, was refused on 2026-11-09), and an object that
+# allows extra keys (additionalProperties) still gets them when the instructions ask for them.
+RESULT_ITEM = obj({
+    "kind": {"type": "string", "enum": ["own", "witness", "message", "speech", "system"]},
+    "language": STR,
+    "facts": {"type": "array", "items": FACT},
+    "prompts": {"type": "array", "items": PROMPT},
+}, ["kind", "facts"])
+
+STATE_CHANGE = obj({
+    "op": {"type": "string", "enum": ["upsert", "merge", "adjust", "append", "remove"]},
+    "entity": {"type": "string", "enum": ["game", "character", "npc_state", "location_state", "npc", "location"]},
+    "id": STR,
+    "path": STR,       # adjust, append, remove
+    "delta": NUM,      # adjust
+    "item_id": STR,    # remove
+    "patch": FREE,     # merge
+    "doc": ANY,        # upsert (an object) and append (a string, a number or an object)
+}, ["op", "entity", "id"])
+
+EVENT = obj({"id": STR, "turn": NINT, "day": NINT, "block": NSTR, "location_id": NSTR, "summary": STR, "participants": STRS, "witnesses": STRS,
+             "character_summaries": {"type": "object", "additionalProperties": STR}, "visibility": STR, "tags": STRS})
+DECISION = obj({"id": STR, "character_id": STR, "turn": NINT, "summary": STR, "gm_impact": NSTR, "tags": STRS, "status": STR})
+MESSAGE = obj({"id": STR, "from": STR, "to": STR, "channel": STR, "text": STR, "sent_turn": NINT, "deliver_turn": NINT, "status": STR,
+               "visible_to": {"type": "array", "items": ANY}})
+DICE = obj({"die": {"type": "string", "enum": ["d6", "d10", "d20"]}, "value": INT, "for": STR}, ["die", "value"])
+DIGEST = obj({"text": STR, "visible_to": ANY})
+ILLUSTRATION = obj({"prompt": STR, "caption": STR, "visible_to": STRS, "location_id": NSTR, "subjects": STRS})
+PORTRAIT = obj({"subject_id": STR, "name": STR, "appearance": STR, "signature_action": NSTR, "visible_to": STRS})
+
+VALIDATION = {"type": ["object", "null"], "additionalProperties": True, "properties": {
+    "character_id": STR,
+    "result": {"type": "string", "enum": ["pass", "pass_with_adjustments", "fail"]},
+    "party_size_used": NINT,
+    "checks": {"type": "array", "items": obj({"n": INT, "name": STR, "result": STR, "note": NSTR})},
+    "adjustments": {"type": "array", "items": FREE},
+}}
+# The parse of a player's action (state contract 3.7). Blocks are declared; share, messages, tasks and the other lists are allowed, not declared.
+BLOCK = obj({"block": NSTR, "intent": STR, "abilities": STRS}, ["intent"])
+PARSED = obj({"blocks": {"type": "array", "items": BLOCK}})
+ACTION = {"type": ["object", "null"], "additionalProperties": True, "properties": {
+    "parsed": PARSED, "supersedes": STRS}}
+
+RESPONSE_SCHEMA = obj({
+    "status": {"type": "string", "enum": ["ok", "needs_dice", "error"]},
+    "mode": STR,
+    "game_id": STR,
+    "turn": NINT,
+    "handling": NSTR,
+    "results": {"type": "object", "additionalProperties": {"type": "array", "items": RESULT_ITEM}},
+    "shared_digest": {"type": "array", "items": DIGEST},
+    "state_changes": {"type": "array", "items": STATE_CHANGE},
+    "events": {"type": "array", "items": EVENT},
+    "decisions": {"type": "array", "items": DECISION},
+    "messages": {"type": "array", "items": MESSAGE},
+    "dice_log": {"type": "array", "items": DICE},
+    "illustrations": {"type": "array", "items": ILLUSTRATION},
+    "portraits": {"type": "array", "items": PORTRAIT},
+    "gm_notes": NSTR,
+    "validation": VALIDATION,
+    "action": ACTION,
+    "errors": STRS,
+}, ["status"])
+
+
+def _types(schema):
+    t = schema.get("type")
+    return t if isinstance(t, list) else ([t] if t else [])
+
+
+_PY = {"object": dict, "array": list, "string": str, "integer": int, "number": (int, float), "boolean": bool, "null": type(None)}
+
+
+def _is(value, t):
+    if t == "integer" and isinstance(value, bool):
+        return False
+    if t == "number" and isinstance(value, bool):
+        return False
+    return isinstance(value, _PY[t])
 
 
 def check(data, schema=RESPONSE_SCHEMA, path="$"):
-    """Returns a list of problems (empty when `data` fits `schema`). Handles type, enum, required, properties, items, additionalProperties."""
+    """Returns a list of problems (empty when `data` fits `schema`). Handles type (or a type list), enum, required, properties, items,
+    additionalProperties (true, false or a schema) and an empty schema (anything)."""
     problems = []
-    if data is None and schema.get("nullable"):
+    if schema.get("nullable") and data is None:
         return problems
-    t = schema.get("type")
-    py = {"object": dict, "array": list, "string": str, "integer": int, "number": (int, float), "boolean": bool}
-    if t and not isinstance(data, py[t]) or (t == "integer" and isinstance(data, bool)):
-        return [f"{path}: expected {t}, got {type(data).__name__}"]
+    ts = _types(schema)
+    if ts and not any(_is(data, t) for t in ts):
+        return [f"{path}: expected {' or '.join(ts)}, got {type(data).__name__}"]
     if "enum" in schema and data not in schema["enum"]:
         problems.append(f"{path}: {data!r} is not one of {schema['enum']}")
-    if t == "object":
+    if isinstance(data, dict) and (not ts or "object" in ts):
         for k in schema.get("required", []):
             if k not in data:
                 problems.append(f"{path}: missing {k}")
@@ -81,7 +139,61 @@ def check(data, schema=RESPONSE_SCHEMA, path="$"):
                 problems += check(v, props[k], f"{path}.{k}")
             elif isinstance(extra, dict):
                 problems += check(v, extra, f"{path}.{k}")
-    elif t == "array" and "items" in schema:
+            elif extra is False:
+                problems.append(f"{path}: unexpected key {k}")
+    elif isinstance(data, list) and "items" in schema:
         for i, v in enumerate(data):
             problems += check(v, schema["items"], f"{path}[{i}]")
     return problems
+
+
+def bare_objects(schema=RESPONSE_SCHEMA, path="$"):
+    """Every object in the schema that declares neither `properties` nor `additionalProperties`: the provider fills those with `{}`."""
+    out = []
+    if not isinstance(schema, dict):
+        return out
+    if "object" in _types(schema) and "properties" not in schema and "additionalProperties" not in schema:
+        out.append(path)
+    for k, v in (schema.get("properties") or {}).items():
+        out += bare_objects(v, f"{path}.{k}")
+    if isinstance(schema.get("additionalProperties"), dict):
+        out += bare_objects(schema["additionalProperties"], f"{path}.*")
+    if isinstance(schema.get("items"), dict):
+        out += bare_objects(schema["items"], f"{path}[]")
+    return out
+
+
+# What a request must come back with. The general schema has to let `validation` and `action` be null (most requests have neither), and a
+# model that is allowed to leave a field out leaves it out (live, 2026-11-09: a character check came back with validation null although
+# the structure was valid). So the schema sent for a request names what that request requires.
+VERDICT = obj({
+    "character_id": STR,
+    "result": {"type": "string", "enum": ["pass", "pass_with_adjustments", "fail"]},
+    "party_size_used": NINT,
+    "checks": {"type": "array", "items": obj({"n": INT, "name": STR, "result": STR, "note": NSTR}, ["name", "result"])},
+    "adjustments": {"type": "array", "items": FREE},
+}, ["result", "checks"])
+
+
+def for_request(mode, request):
+    """The response schema for one request: the general one, plus what the request requires."""
+    s = copy.deepcopy(RESPONSE_SCHEMA)
+    kind = (request or {}).get("kind")
+    if mode == "intake" and kind == "character_submission":
+        s["properties"]["validation"] = copy.deepcopy(VERDICT)  # a verdict, not null
+        s["required"] = s["required"] + ["validation", "results"]
+    elif mode == "intake" and kind == "action":
+        s["properties"]["action"] = obj({"parsed": copy.deepcopy(PARSED), "supersedes": STRS}, ["parsed"])  # the parse of the action, not null
+        s["required"] = s["required"] + ["action", "handling"]
+    elif mode == "resolve_turn":
+        s["required"] = s["required"] + ["results"]
+    return s
+
+
+def for_envelope(user_json):
+    """`for_request` for a request given as the JSON text of the envelope (what the AI Master is sent). The general schema if it cannot be read."""
+    try:
+        env = json.loads(user_json)
+        return for_request(env.get("mode"), env.get("request"))
+    except Exception:
+        return RESPONSE_SCHEMA

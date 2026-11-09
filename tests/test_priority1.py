@@ -272,3 +272,83 @@ def test_structured_output_can_be_switched_off(monkeypatch):
 def test_structured_output_is_off_by_default():
     """The schema in server/schema.py leaves the objects of the contract empty (see its docstring): it must not be sent unless asked for."""
     assert config.GEMINI_STRUCTURED_OUTPUT is False and GeminiGM(usage=None)._structured is False
+
+
+def test_no_object_in_the_response_schema_is_left_bare():
+    """An object with neither properties nor additionalProperties comes back from the provider as {} (the incident of 2026-11-08)."""
+    assert schema.bare_objects() == []
+    assert schema.bare_objects({"type": "object", "properties": {"patch": {"type": "object"}}}) == ["$.patch"], "the walker does find one"
+
+
+def test_every_scripted_answer_of_the_tests_fits_the_schema():
+    from test_engine import standard_gm
+    env = {"mode": "intake", "game": {"id": "g", "clock": {"turn": 1}}, "characters": [{"id": "c", "name": "X"}],
+           "request": {"kind": "action", "text": "wait", "player_id": "p", "character_id": "c"}}
+    assert schema.check(standard_gm(env, 1)) == []
+    env["request"].update(kind="character_submission", payload={})
+    assert schema.check(standard_gm(env, 1)) == []
+
+
+def test_the_validator_understands_type_lists_any_value_and_closed_objects():
+    s = {"type": "object", "properties": {"a": {"type": ["string", "null"]}, "b": {}, "c": {"type": "object", "additionalProperties": False,
+                                                                                       "properties": {"x": {"type": "integer"}}}}}
+    assert schema.check({"a": None, "b": {"any": [1]}, "c": {"x": 1}}, s) == []
+    assert schema.check({"a": 3}, s) and schema.check({"c": {"y": 1}}, s) and schema.check({"c": {"x": True}}, s)
+    assert schema.check({"state_changes": [{"op": "append", "entity": "character", "id": "c", "path": "p", "doc": "Morning"}], "status": "ok"}) == []
+    assert schema.check({"state_changes": [{"op": "merge", "entity": "character", "id": "c", "patch": {"a": {"b": 1}}}], "status": "ok"}) == []
+
+
+def test_the_contract_check_catches_a_hollow_answer():
+    import sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
+    from scenario_checks import contract_problems
+    hollow = {"handling": "queued", "validation": {}, "action": {}, "state_changes": [{"op": "merge", "entity": "character", "id": "c", "patch": {}}],
+              "dice_log": [{}], "events": [{}]}
+    assert contract_problems(hollow, {"kind": "character_submission"}) and contract_problems(hollow, {"kind": "action"})
+    assert contract_problems({"validation": {"result": "pass", "checks": []}}, {"kind": "character_submission"}) == []
+    assert contract_problems({"validation": {"result": "fail", "checks": []}}, {"kind": "character_submission"})
+    good = {"handling": "autonomous", "action": {"parsed": {"blocks": [{"block": "Morning"}]}},
+            "state_changes": [{"op": "append", "entity": "character", "id": "c", "path": "turn_state.blocks_used", "doc": "Morning"}]}
+    assert contract_problems(good, {"kind": "action"}) == []
+
+
+def test_a_character_check_must_return_a_verdict_in_the_schema_sent_for_it():
+    s = schema.for_request("intake", {"kind": "character_submission"})
+    assert "validation" in s["required"] and schema.bare_objects(s) == []
+    ok = {"status": "ok", "results": {}, "validation": {"result": "fail", "checks": [{"name": "Budget", "result": "fail", "note": "24 of 22"}]}}
+    assert schema.check(ok, s) == []
+    assert schema.check({"status": "ok", "results": {}, "validation": None}, s), "null is not a verdict"
+    assert schema.check({"status": "ok", "results": {}}, s), "and neither is nothing"
+    assert schema.check({"status": "ok", "results": {}, "validation": {}}, s), "nor an empty block"
+    assert schema.check({"status": "ok", "validation": None}) == [], "other requests may leave it null"
+    a = schema.for_request("intake", {"kind": "action"})
+    assert "validation" not in a["required"] and "action" in a["required"] and schema.bare_objects(a) == []
+    assert schema.check({"status": "ok", "handling": "queued", "action": {"parsed": {"blocks": [{"block": "Morning", "intent": "search"}]}}}, a) == []
+    assert schema.check({"status": "ok", "handling": "queued", "action": None}, a), "an action request needs its parse"
+    assert schema.check({"status": "ok", "handling": "queued", "action": {"parsed": {"blocks": [{"block": "Morning"}]}}}, a), "a block says its intent"
+    assert "results" in schema.for_request("resolve_turn", None)["required"]
+
+
+def test_the_schema_is_chosen_from_the_envelope_text():
+    import json as _j
+    env = _j.dumps({"mode": "intake", "request": {"kind": "character_submission"}})
+    assert "validation" in schema.for_envelope(env)["required"]
+    assert schema.for_envelope("not json") is schema.RESPONSE_SCHEMA
+
+
+def test_a_bare_400_from_the_provider_counts_as_a_refusal_of_the_schema(monkeypatch):
+    """Seen 2026-11-09: the provider refused a too-large schema with 'Request contains an invalid argument' and no word about a schema."""
+    monkeypatch.setattr(config, "GEMINI_STRUCTURED_OUTPUT", True)
+    sent = []
+
+    class Models:
+        def generate_content(self, model, contents, config):
+            sent.append(config.response_json_schema)
+            if config.response_json_schema is not None:
+                raise Exception("400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.'}}")
+            return type("R", (), {"text": "{}", "usage_metadata": None})()
+
+    gm = GeminiGM(usage=None)
+    monkeypatch.setattr(gm, "_get", lambda: type("C", (), {"models": Models()})())
+    assert gm.call("s", "{}", tier="light") == "{}"
+    assert sent[0] is not None and sent[1] is None and gm.last_meta["schema_disabled"]

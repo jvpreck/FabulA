@@ -13,12 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from server import prompt, schema
+from server import config, prompt, schema
 from server.db import MemoryStore
 from server.engine import Engine, EngineError
 from server.gm import GeminiGM, parse
 from scenario_checks import run_checks
-from test_engine import ADV, PG, ScriptedGM, standard_gm, new_game, CHECK
+from test_engine import ADV, PG, ScriptedGM, standard_gm, new_game, char_pkg, CHECK
 
 DATA = json.loads((Path(__file__).parent / "scenarios" / "scenarios.json").read_text(encoding="utf-8"))
 SCENARIOS = [s for s in DATA["scenarios"] if not s.get("live_only")]  # live_only ones need the real model
@@ -141,8 +141,19 @@ def test_live_scenario(sc, monkeypatch):
     gm = HybridGM(GeminiGM(usage=None), sc)
     eng = Engine(MemoryStore(), gm, now_fn=lambda: datetime(2026, 11, 1, 9, tzinfo=timezone.utc))
     monkeypatch.setattr("server.engine.make_dice", lambda *a, **k: json.loads(json.dumps(D)))  # known dice, so the dice check is exact
-    gid, cid = start(eng, sc.get("lethality"))
-    if sc["request"]["kind"] == "resolve_turn":  # the player acts (scripted), then the turn closes: that call goes to the strong model
+    if sc["request"]["kind"] == "character_submission":  # a new character is checked: no game start, the package flow of a real client
+        gid = new_game(eng, PLAYER, ADV, language="en")["game_id"]
+        pkg = eng.generate_character(PLAYER, gid, "generate", concept=sc["request"]["text"])["package"]
+        try:
+            out = eng.submit_package(PLAYER, pkg["task_id"], char_pkg(concept=sc["request"]["text"]))
+        except EngineError as e:
+            pytest.fail(f"the engine could not use the AI Master's answers to the character check: {e}")
+        cid = eng.store.find("character", game_id=gid)[0][0]["id"]
+    else:
+        gid, cid = start(eng, sc.get("lethality"))
+    if sc["request"]["kind"] == "character_submission":
+        pass
+    elif sc["request"]["kind"] == "resolve_turn":  # the player acts (scripted), then the turn closes: that call goes to the strong model
         eng.submit_action(PLAYER, gid, "action", sc["setup_action"], cid)
         out = eng.resolve_turn(gid)
     else:
@@ -152,7 +163,8 @@ def test_live_scenario(sc, monkeypatch):
           f"model={gm.last.get('model')} degraded={gm.last.get('degraded')}, "
           f"tokens in={gm.last_meta.get('tokens_in')} cached={gm.last_meta.get('tokens_cached')} out={gm.last_meta.get('tokens_out')} "
           f"thinking={gm.last_meta.get('tokens_thought')} retries={gm.last_meta.get('retries')}, "
-          f"{gm.last_meta.get('latency_ms')} ms, schema off={bool(gm.last_meta.get('schema_disabled'))}")
+          f"{gm.last_meta.get('latency_ms')} ms, structured output={'on' if config.GEMINI_STRUCTURED_OUTPUT else 'off'}"
+          f"{' (REFUSED by the provider)' if gm.last_meta.get('schema_disabled') else ''}")
     resp = parse(raw)
     problems = run_checks(resp, json.loads(user), list(sc.get("live_secrets", ())) + list(sc.get("never_reaches_players", ())),
                           player_facing(eng, gid, cid, out))

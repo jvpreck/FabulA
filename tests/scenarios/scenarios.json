@@ -96,6 +96,13 @@
       "live_adventure_extra": "There is a trapdoor behind the shelf in the mill office: TRAPDOOR-BEHIND-THE-SHELF. Nobody has noticed it, and waiting and watching the door does not reveal it."
     },
     {
+      "name": "character_check_gives_a_verdict",
+      "live_only": true,
+      "live": true,
+      "request": {"kind": "character_submission", "text": "a reporter"},
+      "live_secrets": []
+    },
+    {
       "name": "BAD_invented_dice_are_detected",
       "request": {"kind": "action", "text": "I force the lock."},
       "recorded": {
