@@ -46,7 +46,7 @@ SCHEMAS = {
     "create_game": {
         "title": "string", "language": "string", "display_name": "string",
         "lethality": "low | moderate | high", "turn_interval_hours": "int", "turn_span": "day | block",
-        "pvp": "none | soft | full", "visibility": "private | open", "illustrations": "off | on",
+        "pvp": "none | soft | full", "visibility": "private | open", "players_expected": "int, 1 to the adventure's maximum (default 1): the game starts when that many players have a confirmed character", "illustrations": "off | on",
         "image_style": "string, 40 to 700 characters, English: the fixed look of every picture in this game (required when illustrations is on)", "notes": "string"},
 }
 
@@ -253,6 +253,10 @@ def validate_game(p, adventure, images_available=False):
             problems.append("turn_timezone must be an IANA timezone name such as Europe/Madrid")
     if p.get("pvp", "soft") not in ("none", "soft", "full"):
         problems.append("pvp must be none, soft or full")
+    pe = p.get("players_expected")
+    top = ((adventure or {}).get("players") or {}).get("max", 5)
+    if pe is not None and (isinstance(pe, bool) or not isinstance(pe, int) or not (1 <= pe <= top)):
+        problems.append(f"players_expected must be a whole number from 1 to {top}")
     ill = p.get("illustrations") or ("on" if images_available else "off")  # on by default when the server can draw
     if ill not in ("off", "on"):
         problems.append("illustrations must be off or on")

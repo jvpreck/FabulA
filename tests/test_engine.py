@@ -58,6 +58,10 @@ def standard_gm(env, n):
     cid = req.get("character_id")
     if kind in ("game_created", "join"):
         r["results"][pid] = [item("Setup questions", kind="system")]
+    elif kind == "begin":
+        for c in env["characters"]:
+            if c.get("status") == "active":
+                r["results"][c["id"]] = [item("Welcome", kind="system")]
     elif kind == "character_submission":
         me = next(c for c in env["characters"] if c["id"] == cid)
         patch = {"status": "validated", "location": {"id": "loc_tolland_house", "detail": ""}}
@@ -183,10 +187,11 @@ def test_gm_files_are_independent_of_ruleset_and_adventure():
 def test_setup_and_start_solo(world):
     eng, store, gm, clock = world
     out = new_game(eng, "p_jorge", ADV, language="en")
-    assert out["setup"] and out["setup"][0]["items"][0]["facts"][0]["text"] == "Setup questions"
+    assert out["phase"] == "characters" and not out["setup"] and "Create your character" in out["next_step"]
+    assert gm.calls == [], "creating a game does not call the AI Master (TLR-01-013)"
     gid = out["game_id"]
     game, _ = store.get("game", gid)
-    assert game["settings"]["lethality"] == "moderate" and game["phase"] == "setup"
+    assert game["settings"]["lethality"] == "moderate" and game["phase"] == "characters" and game["settings"]["players_expected"] == 1
     gid, cid = start_solo(eng, "p_ana")
     game, _ = store.get("game", gid)
     assert game["phase"] == "active" and game["format"] == "solo" and game["party_size_at_start"] == 1
@@ -464,7 +469,8 @@ def test_adventure_package_flow(world):
     assert "GM only plan" not in json.dumps(eng.list_adventures("p_jorge"))
     with pytest.raises(EngineError):                 # a finished task cannot be reused
         eng.submit_package("p_jorge", pkg["task_id"], adventure_pkg())
-    new_game(eng, "p_jorge", aid)
+    gid = new_game(eng, "p_jorge", aid)["game_id"]
+    new_char(eng, "p_jorge", gid)
     system = eng.gm.calls[-1][0]
     assert "GM only plan" in system and "written by a player's client" in system
     gp = eng.create_game("p_jorge", aid)["package"]
@@ -499,7 +505,7 @@ def test_game_package_flow(world):
     bad = eng.submit_package("p_jorge", pkg["task_id"], game_pkg(lethality="deadly", turn_interval_hours=0))
     assert bad["accepted"] is False and len(bad["problems"]) == 2
     ok = eng.submit_package("p_jorge", pkg["task_id"], game_pkg(lethality="low", title="My run", pvp="none"))
-    assert ok["accepted"] is True and ok["game_id"] and ok["setup"]
+    assert ok["accepted"] is True and ok["game_id"] and ok["phase"] == "characters"
     game, _ = store.get("game", ok["game_id"])
     assert game["settings"]["lethality"] == "low" and game["settings"]["pvp"] == "none" and game["title"] == "My run"
     assert game["roster"][0]["player_id"] == "p_jorge"
@@ -519,10 +525,10 @@ def test_character_package_flow_and_injection_is_dropped(world):
                     settings={"safety": {"fears": ["gore"]}, "standing_orders": {"hold": "stay", "evil": "x"}},
                     inventory=[{"item": "press card", "qty": 1}], relationships=[{"with_id": "npc_sam", "attitude": "ally", "trust": 9}])
     r = eng.submit_package("p_jorge", pkg["task_id"], evil)
-    assert r["accepted"] is True and len(gm.calls) == calls + 1       # one cross-check by the AI Master
+    assert r["accepted"] is True and len(gm.calls) == calls + 2       # the cross-check by the AI Master, and the opening when the game starts
     cid = r["character_id"]
     c, _ = store.get("character", cid)
-    assert c["gm_only"] == {} and c["is_alive"] is True and c["status"] == "validated" and c["client_sync"]["version"] < 99
+    assert c["gm_only"] == {} and c["is_alive"] is True and c["status"] == "active" and c["client_sync"]["version"] < 99  # active because the check passed (TLR-01-013), not because the package said so
     assert all("x" not in i for i in c["inbox"])
     assert c["name"] == "Iris Calder" and c["sheet"]["groups"]["action"]["Health"]["cur"] == 8
     assert c["inventory"][0]["item"] == "press card" and c["relationships"][0]["trust"] == 3
@@ -709,7 +715,7 @@ def test_envelope_lists_takeovers_and_unclaimed_pregenerated(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng, "p_ana")
     _add_npc(eng, store, gid, "npc_clerk", "Mr Clerk", met_by=[cid])
-    eng.join_game("p_jorge", gid)
+    eng.submit_action("p_ana", gid, "free_query", "who is here?", cid)
     env = gm.calls[-1][1]
     assert [t["npc_id"] for t in env["takeover_options"]] == ["npc_clerk"] and all("pregen_id" not in t for t in env["takeover_options"])
     claimed = store.get("character", cid)[0].get("pregen_id")
@@ -792,14 +798,13 @@ def test_pregenerated_choice_is_enforced_by_the_server(world):
     r = eng.generate_character("p_jorge", gid, "pregen", pregen_id="Pregen Test C")   # a name instead of the id is understood
     mine = r["deliveries"][0]["character_id"]
     assert store.get("character", mine)[0]["pregen_id"] == "pregen_test_c"
-    # choosing again before confirming replaces the draft instead of keeping the first one
-    r2 = eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_d")
-    again = r2["deliveries"][0]["character_id"]
-    assert again != mine and store.get("character", again)[0]["pregen_id"] == "pregen_test_d"
-    assert store.get("character", mine)[0]["status"] == "gone"
-    # the one given up is free again
+    # TLR-01-013: a sheet that passes is confirmed at once, so the choice cannot be taken back (the client shows the options before it asks)
+    assert store.get("character", mine)[0]["status"] == "active"
+    with pytest.raises(EngineError):
+        eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_d")
     eng.join_game("p_third", gid)
-    assert eng.generate_character("p_third", gid, "pregen", pregen_id="pregen_test_c")
+    with pytest.raises(EngineError):                                       # still taken
+        eng.generate_character("p_third", gid, "pregen", pregen_id="pregen_test_c")
 
 
 def test_a_stray_draft_does_not_make_a_pregenerated_character_look_taken(world):

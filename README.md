@@ -75,7 +75,7 @@ To add a ruleset, drop a markdown file with front matter into `rulesets/`. To ad
 | `join_game` | Join a game by id |
 | `generate_character` | `generate` and `provided` return a work package to build or check the sheet locally; `pregen` and `from_npc` are handled on the server |
 | `submit_package` | Sends back the finished package (`task_id` and the result). The server validates and stores it, or returns the problems to fix |
-| `submit_action` | Actions, speech, setup answers, character confirmation, standing orders, decisions, messages, free queries, pause |
+| `submit_action` | Actions, speech, approval of character adjustments, standing orders, decisions, messages, free queries, pause |
 | `get_results` | Collect results not yet delivered |
 | `list_images`, `get_image` | The pictures of a game that the player's characters could see, and a fresh short-lived link to one of them |
 | `set_game_options` | The host of a game turns illustrations on or off |

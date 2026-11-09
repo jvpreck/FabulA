@@ -88,7 +88,7 @@ def test_each_profile_gets_the_sections_its_requests_need_and_is_smaller():
     full, turn, play, setup = sys(None), sys("turn"), sys("play"), sys("setup")
     assert "### 5.2 `resolve_turn` mode" in turn and "### 5.2 `resolve_turn` mode" not in play
     assert "### 5.3 Autonomous actions" in play and "### 5.3 Autonomous actions" not in turn
-    assert "### 4.1 Setup" in setup and "### 4.1 Setup" not in play and "### 4.1 Setup" not in turn
+    assert "### 4.3 Begin" in setup and "### 4.3 Begin" not in play and "### 4.3 Begin" not in turn
     assert "### 4.2 Request kinds" in play and "### 4.2 Request kinds" not in turn
     assert "Character intake and validation" in setup and "Character intake and validation" not in play
     assert "### 5.6 Illustrations" not in turn and "### 5.6 Illustrations" in sys("turn", ("illustrations",))
@@ -118,7 +118,7 @@ def test_the_engine_sends_the_profile_of_the_request(monkeypatch):
     play_system, turn_system = gm.calls[0][0], gm.calls[1][0]
     assert "### 5.3 Autonomous actions" in play_system and "### 5.2 `resolve_turn` mode" not in play_system
     assert "### 5.2 `resolve_turn` mode" in turn_system and "### 5.3 Autonomous actions" not in turn_system
-    assert Engine._profile("intake", {"kind": "join"}) == "setup" and Engine._profile("intake", {"kind": "character_submission"}) == "check"
+    assert Engine._profile("intake", {"kind": "begin"}) == "setup" and Engine._profile("intake", {"kind": "character_submission"}) == "check"
     assert Engine._profile("intake", {"kind": "action"}) == "play" and Engine._profile("resolve_turn", None) == "turn"
     monkeypatch.setattr(config, "PROMPT_SLIM", False)
     assert Engine._profile("intake", {"kind": "action"}) is None

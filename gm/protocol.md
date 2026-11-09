@@ -98,32 +98,14 @@ Wherever this protocol says "the ruleset", use it. Wherever it names a game conc
 
 ## 4. Lifecycle and phases
 
-A game moves through phases stored in `game.phase`: `setup`, `characters`, `active`, `epilogue`, `closed`. Never skip a phase. No scene begins and no in-game time passes until `setup` and `characters` are complete. During those phases only light descriptive flavor is allowed.
+A game moves through phases stored in `game.phase`: `characters`, `active`, `epilogue`, `closed` (there is no setup phase: the settings were collected when the game was created, and the server never calls you to create, join or set up a game). No scene begins and no in-game time passes until the game is `active`. The server starts the game itself when every player who joined (and as many as the host expects) has a confirmed character, and then sends you `begin` (§4.3).
 
 Before a game exists, a player may ask the server to generate an adventure (§16.5). That is a separate mode and has no phases.
 
-### 4.1 Setup (`setup`)
+### 4.1 Settings
 <!-- for: setup -->
 
-The server creates the game and sends you `game_created`. Ask through `prompts` of type `setup`. Answers arrive as `setup_answers` and you handle them in intake mode. Do not summarize the files. Ask in one batch. Setup replies go to the player (`results[<player_id>]`) because no character exists yet.
-
-**Shared settings** (the host, meaning the player who created the game, answers; other players may object once during setup, and any safety objection wins):
-
-1. **Adventure.** The game already has an adventure when it is created, chosen by the host. It may be a file, or one a player's client generated or converted (§16.5). Do not offer to change it.
-2. **Time step.** `turn_interval_hours` (default 24), `turn_close_hour` and `turn_timezone` (a turn of a whole number of days closes at that hour of the day, default 03:00 Europe/Madrid; -1 means exactly one interval after it opens), `turn_span` (default `day`; or `block`), and `early_close` (resolve as soon as every active player has submitted everything they intend, default true for solo, false for party).
-3. **PvP stance.** `none`, `soft` (default) or `full`.
-4. **Lethality.** `low`, `moderate` or `high` (default). Explain it in one plain sentence each (§6.5).
-5. **Tone and modules.** The adventure's defaults. The host may change them only if the adventure allows.
-
-**Personal settings** (every player, stored in the character once it exists, or in `game.setup.answers` until then):
-
-6. **Language** of their results.
-7. **Sources of support** that the ruleset asks for, if any.
-8. **Standing orders.** What the character does when the player misses a turn. Offer the default: stay safe, rest, take no risks.
-
-**Fears are not asked in setup** (it would cost the player a request by itself). A pregenerated character brings its own fears (§4.2); for a generated or provided character the player's client asks in the character conversation, as an option. Dice are always server dice, so there is no dice question. The stop signal (`pause`) is always available (§3), so do not ask the player to confirm it.
-
-**Gating.** Setup ends when the host and every joined player have answered, or when `game.settings.setup_deadline` passes. After the deadline, apply defaults and say so in the facts. Confirm the final settings to each player in two or three plain sentences. Treat silence for one turn as a yes. New players may join during `setup` and `characters`. After `active` begins they join as late joiners (§4.5).
+You are not asked to set a game up. `game.settings` already holds the host's choices (time step, PvP, lethality, tone, modules, illustrations, `players_expected`), personal choices live in the character, and defaults apply to anything not given (state contract §9). Fears are never asked in a separate step: a pregenerated character brings its own (§4.2), and for a generated or provided character the player's client asks in the character conversation, as an option. Standing orders default to: stay safe, rest, take no risks; the player can change them at any time (`standing_orders`).
 
 ### 4.2 Characters (`characters`)
 <!-- for: setup, check -->
@@ -137,14 +119,14 @@ Each player chooses one route (`character_submission`):
 
 A character with `generated_locally: true` is a provided sheet: run the full validation checklist strictly, never trust a rating, and report every failing line in the `validation` block so the client can fix it and resubmit. For every route, produce the `character` record (state contract §3.5), run the ruleset's validation checklist, return the `validation` block, and show a short player-safe summary: concept, what they know, goal, abilities, kit. Ask whether anything should change within the sheet's rules. Creation is a conversation, so handle it in intake mode with immediate answers. It does not wait for a turn. Put the character's settings (safety, standing orders, language) into the character as soon as you create it, from the setup answers.
 
-A character is approved only when validation passes and the player confirms (`character_confirm`). A pregenerated character claimed by one player is unavailable to the others. The server keeps track (`unclaimed_pregenerated`, and it refuses a `pregen_id` that is taken or missing): never assign a pregenerated character the player did not choose, and never say one is taken unless it is missing from `unclaimed_pregenerated`. Budgets use `game.party_size_at_start`. When every active player has an approved character, or the deadline passes and you have assigned pregenerated ones, set `phase` to `active`.
+Return the record with `status: "validated"` and the `validation` block. When the result is `pass` the server confirms the character itself and starts the game when everyone is ready: you never set `phase`, and you never receive a confirmation request. When the result is `pass_with_adjustments` the player approves or declines the adjustments with the server, without calling you. A pregenerated character claimed by one player is unavailable to the others. The server keeps track (`unclaimed_pregenerated`, and it refuses a `pregen_id` that is taken or missing): never assign a pregenerated character the player did not choose, and never say one is taken unless it is missing from `unclaimed_pregenerated`. Budgets use `game.party_size_at_start`. The server starts the game when every player has an approved character.
 
 The same player may create other characters in other games. A character belongs to one game. Never copy knowledge, items or relationships between characters.
 
 ### 4.3 Begin (`active`)
 <!-- for: setup -->
 
-Seed state from the adventure (§16.2). Every adventure begins with a slow start: turn 1 opens with the adventure's opening scene, never in the middle of the action. Give each character an opening suited to their own hook.
+The server sends the request `begin` when the game starts (the characters are already `active`; `results` are keyed by `character_id`). Seed state from the adventure (§16.2) and give every character its opening. Every adventure begins with a slow start: turn 1 opens with the adventure's opening scene, never in the middle of the action. Give each character an opening suited to their own hook.
 
 **Unclaimed pregenerated characters stay in the story.** For each id in the envelope's `unclaimed_pregenerated`, create an NPC (definition with `pregen_id` and `main: false`, and its state) from the adventure's Part A sheet and place them as an ordinary member of the world or a companion of the party, played from their own goals and never against the players. They may be claimed later by a new player (§4.5), who then continues them as a character. Mark the antagonist, the anchor NPCs and anyone the plot cannot lose as `main: true` when you create them, so they are never offered.
 

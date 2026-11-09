@@ -157,7 +157,7 @@ class Engine:
         gid = game["id"]
         known = self._roster_character_ids(game)
         chars = [c for c in ws.load_game_characters(gid) if c["id"] in known or c.get("status") == "dead"]  # a stray draft nobody plays must not look taken
-        full_all = mode == "resolve_turn" or game["phase"] != "active"
+        full_all = mode == "resolve_turn" or game["phase"] != "active" or (request or {}).get("kind") == "begin"
         sa = ws.get("submit_action", f"{gid}:{(game.get('clock') or {}).get('turn')}")
         out_chars = []
         for c in chars:
@@ -224,7 +224,7 @@ class Engine:
             env["previous_errors"] = previous_errors
         return env
 
-    DICE_FREE_KINDS = {"free_query", "message", "game_created", "join", "setup_answers", "character_submission", "character_confirm"}
+    DICE_FREE_KINDS = {"free_query", "message", "begin", "character_submission"}
 
     @classmethod
     def _dice(cls, mode, request, n_chars, scale=1):
@@ -372,7 +372,7 @@ class Engine:
                 self._log_call(game_id, level, tier, mode, request, outcome, tries)
         raise EngineError(f"the GM response was rejected {tries} times: {errors}")
 
-    SETUP_KINDS = {"game_created", "join", "setup_answers", "character_submission", "character_confirm"}
+    SETUP_KINDS = {"begin", "character_submission"}
 
     @classmethod
     def _profile(cls, mode, request):
@@ -1199,7 +1199,7 @@ class Engine:
         for g, _ in self.store.find("game"):
             joined = any(r["player_id"] == player_id for r in g.get("roster", []))
             vis = (g.get("settings") or {}).get("visibility", "private")
-            if not joined and not (vis == "open" and g.get("phase") in ("setup", "active")):
+            if not joined and not (vis == "open" and g.get("phase") in ("setup", "characters", "active")):
                 continue
             adv = ws.get("adventure", g["adventure_id"])
             if adv is None:
@@ -1353,7 +1353,7 @@ class Engine:
         s = {"turn_interval_hours": rec.get("turn_interval_hours", 24), "turn_span": rec.get("turn_span", "day"),
              "turn_close_hour": rec.get("turn_close_hour", config.TURN_CLOSE_HOUR), "turn_timezone": config.TURN_TIMEZONE,
              "early_close": None, "pvp": "soft", "visibility": "private", "illustrations": "off", "image_style": None, "lethality": rec.get("lethality", "high"),
-             "tone_preset": None, "modules": [], "setup_deadline": iso(self.now() + timedelta(days=3)),
+             "tone_preset": None, "modules": [], "players_expected": 1, "setup_deadline": iso(self.now() + timedelta(days=3)),
              "crisis": {"active": False, "turn_span": "beat", "turn_interval_hours": 24}}
         for k, v in (settings or {}).items():
             if k in s:
@@ -1361,7 +1361,7 @@ class Engine:
         if s["lethality"] not in ("low", "moderate", "high"):
             raise EngineError("lethality must be low, moderate or high")
         gid = short("g")
-        game = {"id": gid, "title": title or adv.get("title"), "phase": "setup", "format": None, "party_size_at_start": None,
+        game = {"id": gid, "title": title or adv.get("title"), "phase": "characters", "format": None, "party_size_at_start": None,
                 "host_player_id": player_id, "language": language or p.get("language", "en"), "adventure_id": adventure_id,
                 "ruleset_id": adv["ruleset_id"], "settings": s, "roster": [{"player_id": player_id, "character_id": None}],
                 "roster_history": [], "clock": {"turn": 0, "day": 0, "block": None, "deadline_turn": None, "turn_opens": None, "turn_closes": None},
@@ -1369,9 +1369,11 @@ class Engine:
                 "messages": [], "turns": [], "setup": {"answers": {}, "inbox": {}}}
         ws.put("game", gid, game)
         p["games"].append(gid)
-        req = {"player_id": player_id, "character_id": None, "kind": "game_created", "text": "", "payload": {}}
-        self._run(ws, gid, "intake", req)
-        return {"game_id": gid, **self._finish(ws, player_id, gid)}
+        # TLR-01-013: there is no setup phase and no AI Master call here. The settings were collected by the create_game package.
+        return {"game_id": gid, "phase": "characters",
+                "next_step": "Create your character now (one action): generate_character with route pregen, generate or provided. "
+                             f"The game starts by itself when {s['players_expected']} player(s) have a confirmed character.",
+                **self._finish(ws, player_id, gid)}
 
     # ---- join_game
     def join_game(self, player_id, game_id, display_name=None, language=None):
@@ -1389,10 +1391,10 @@ class Engine:
         game["roster"].append({"player_id": player_id, "character_id": None})
         if game_id not in p["games"]:
             p["games"].append(game_id)
-        req = {"player_id": player_id, "character_id": None, "kind": "join", "text": "",
-               "payload": {"display_name": p.get("display_name"), "language": p.get("language")}}
-        self._run(ws, game_id, "intake", req)
-        return {"game_id": game_id, **self._finish(ws, player_id, game_id)}
+        ws.touch("game", game_id)
+        return {"game_id": game_id, "phase": game["phase"],
+                "next_step": "Create your character now (one action): generate_character with route pregen, generate or provided.",
+                **self._finish(ws, player_id, game_id)}
 
     # ---- characters
     def _draft_character(self, ws, game, player, payload):
@@ -1586,6 +1588,8 @@ class Engine:
                 s["turn_close_hour"] = package["turn_close_hour"]
             if package.get("turn_timezone"):
                 s["turn_timezone"] = package["turn_timezone"].strip()
+            if isinstance(package.get("players_expected"), int) and not isinstance(package.get("players_expected"), bool):
+                s["players_expected"] = package["players_expected"]
             if isinstance(s.get("image_style"), str):
                 s["image_style"] = s["image_style"].strip()
             if "illustrations" not in s and self._images_available():
@@ -1792,6 +1796,10 @@ class Engine:
         topic = str(payload.get("topic") or "").strip().lower()
         if kind == "free_query" and c is not None and topic in level2.TOPICS:
             return self._answer_level2(ws, game, player_id, c, topic)
+        if kind == "setup_answers":
+            return self._store_setup_answers(ws, game, player_id, payload)
+        if kind == "character_confirm":
+            return self._confirm_character(ws, game, player_id, c, payload)
         request = {"player_id": player_id, "character_id": cid, "kind": kind, "text": text, "payload": payload}
         phase_before = game["phase"]
         post = self._post_intake(kind, text, cid)
@@ -1802,7 +1810,12 @@ class Engine:
                 raise
             return self._defer_action(player_id, game_id, cid, text, e)
         game = ws.get("game", game_id)
-        if phase_before != "active" and game["phase"] == "active":
+        started = False
+        if kind == "character_submission":  # TLR-01-013: a sheet that passes is confirmed by the server, the player is not asked again
+            c2 = ws.get("character", cid)
+            if c2 and c2.get("status") == "validated" and (c2.get("validation") or {}).get("result") == "pass":
+                started = self._activate_character(ws, game, c2)
+        if phase_before != "active" and game["phase"] == "active" and not started:
             self._start_game(ws, game)
         handling = resp.get("handling")
         extra = {"handling": handling if handling in HANDLINGS else "answered"}
@@ -1815,6 +1828,61 @@ class Engine:
                 extra["handling"] = "resolved_turn"
         ws = self._ws()
         return self._finish(ws, player_id, game_id, extra)
+
+    # ---- TLR-01-013: no setup phase. The game is created by one action and a character by one action; the server confirms a character whose
+    # validation passed and starts the game itself when every player who joined (and as many as the host expects) has a confirmed character.
+    def _store_setup_answers(self, ws, game, player_id, payload):
+        game.setdefault("setup", {"answers": {}, "inbox": {}}).setdefault("answers", {}).update(
+            {str(k)[:60]: str(v)[:500] for k, v in list((payload.get("answers") or {}).items())[:20]})
+        ws.touch("game", game["id"])
+        return self._finish(ws, player_id, game["id"], {"handling": "answered", "level": 2,
+                            "message": "There is no setup step any more: the game was created with the settings chosen when it was made. Create your character."})
+
+    def _confirm_character(self, ws, game, player_id, c, payload):
+        approved = payload.get("approved", True) is not False
+        if c.get("status") == "active":
+            return self._finish(ws, player_id, game["id"], {"handling": "answered", "level": 2, "message": "The character is already confirmed."})
+        if c.get("status") != "validated":
+            raise EngineError("this character has not passed validation yet; submit it first")
+        started = False
+        if approved:
+            started = self._activate_character(ws, game, c)
+        else:
+            c["status"] = "draft"
+            ws.touch("character", c["id"])
+        return self._finish(ws, player_id, game["id"], {"handling": "answered", "level": 2, "character_status": c["status"], "game_started": started})
+
+    def _activate_character(self, ws, game, c):
+        """The character is confirmed. In a game that is already running it joins the story; otherwise the game starts if everyone is ready.
+        True when this started the game."""
+        c["status"] = "active"
+        ws.touch("character", c["id"])
+        if game["phase"] == "active":
+            c["opening_due"] = True
+            sa = ws.get("submit_action", f"{game['id']}:{game['clock'].get('turn')}")
+            if sa is not None:
+                sa["actions"].setdefault(c["id"], [])
+                ws.touch("submit_action", sa["id"])
+            return False
+        if game["phase"] not in ("setup", "characters"):
+            return False
+        chars = [ws.get("character", r["character_id"]) if r.get("character_id") else None for r in game["roster"]]
+        if any(x is None or x.get("status") != "active" for x in chars) or len(chars) < int((game.get("settings") or {}).get("players_expected") or 1):
+            ws.touch("game", game["id"])
+            return False
+        game["phase"] = "active"
+        ws.touch("game", game["id"])
+        self._start_game(ws, game)
+        self._begin(ws, game)
+        return True
+
+    def _begin(self, ws, game):
+        """The game has started: one AI Master call gives every character its opening (protocol 4.3). If the AI Master cannot be reached the openings
+        are delivered with the first answer, because `opening_due` stays set."""
+        try:
+            self._run(ws, game["id"], "intake", {"player_id": None, "character_id": None, "kind": "begin", "text": "", "payload": {}})
+        except (GeminiTrouble, AIMasterBusy, EngineError):
+            pass
 
     # ---- TLR-01-009, level 2: a free query with a known `topic` is answered from the database. No AI Master call, no quota.
     def _answer_level2(self, ws, game, player_id, c, topic):

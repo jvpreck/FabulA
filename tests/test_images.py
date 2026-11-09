@@ -194,7 +194,7 @@ def test_only_the_characters_who_saw_it_can_get_it(world):
         eng.get_image("p_c", gid, iid)                                          # not even in the game
     with pytest.raises(EngineError):
         eng.get_image("p_a", gid, "img_nope")
-    assert eng.get_results("p_b", gid)["illustrations"] == []
+    assert [i for i in eng.get_results("p_b", gid)["illustrations"] if i["kind"] == "scene"] == []
 
 
 def test_failures_quota_budget_and_expiry(world):
