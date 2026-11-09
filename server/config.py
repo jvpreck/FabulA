@@ -123,6 +123,12 @@ CACHE_MIN_CHARS = int(os.environ.get("CACHE_MIN_CHARS", "20000"))  # shorter ins
 
 # What a request of one character is told about the world (TLR-03-012). "off" sends the whole world, as before.
 ENVELOPE_RELEVANT = os.environ.get("ENVELOPE_RELEVANT", "on").lower() not in ("off", "0", "false", "no")
+# TLR-03-014: the request is serialized without spaces and without empty values (null, "", [], {}); the state contract says a missing field is not set.
+ENVELOPE_COMPACT = os.environ.get("ENVELOPE_COMPACT", "on").lower() not in ("off", "0", "false", "no")
+# Server-rolled dice per request: a request that never rolls (a question, a message, setup) gets a few; an action or a decision gets enough for a turn's Blocks.
+# A stream that runs out costs one retry with twice as many (`needs_dice`), so the small numbers are safe.
+DICE_SMALL = (int(os.environ.get("DICE_SMALL_D6", "6")), int(os.environ.get("DICE_SMALL_D10", "3")), int(os.environ.get("DICE_SMALL_D20", "3")))
+DICE_ACTION = (int(os.environ.get("DICE_ACTION_D6", "40")), int(os.environ.get("DICE_ACTION_D10", "20")), int(os.environ.get("DICE_ACTION_D20", "20")))
 ENVELOPE_WORLD_NARROW_CHARS = int(os.environ.get("ENVELOPE_WORLD_NARROW_CHARS", "12000"))  # a world smaller than this is sent whole
 
 # The strong model times out or answers 5xx on large prompts. A player waiting for a character check must not wait for that, so the check

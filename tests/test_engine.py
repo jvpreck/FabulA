@@ -599,8 +599,8 @@ def test_envelope_hides_other_characters_knowledge_in_intake(world):
     env = gm.calls[-1][1]
     mine = next(c for c in env["characters"] if c["id"] == a)
     other = next(c for c in env["characters"] if c["id"] == b)
-    assert "knowledge" in mine and "knowledge" not in other and "inbox" not in mine
-    assert "dice" in env and len(env["dice"]["d6"]) >= 60
+    assert "knowledge" not in other and "inbox" not in mine  # (a new character's own empty knowledge is left out by the compact serialization)
+    assert "dice" in env and len(env["dice"]["d6"]) >= config.DICE_SMALL[0]  # a question rolls nothing, so few dice are sent
 
 
 # ---------------------------------------------------------------- adventure seeds

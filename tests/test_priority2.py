@@ -365,3 +365,42 @@ def test_the_cache_and_the_breaker_work_together_on_a_failing_strong_model(monke
     gm.usage.record({"level": 4, "tier": "light", "mode": "resolve_turn", "kind": "-", "game_id": "g", "breaker": "open", "cache": "created"})
     row = next(iter(gm.usage.stats()["by_level_tier_mode_kind"].values()))
     assert row["breaker_open"] == 1 and row["cache_created"] == 1
+
+
+# ---------------------------------------------------------------- TLR-03-014: compact serialization and proportional dice
+def test_the_request_is_serialized_without_spaces_or_empty_values_but_request_and_dice_are_whole(monkeypatch):
+    import json
+    from server.engine import Engine
+    env = {"mode": "intake", "game": {"a": None, "b": "", "c": [], "d": {}, "e": 0, "f": False, "g": [{"h": None, "i": 1}], "j": {"k": []}},
+           "request": {"payload": {"approved": False, "note": ""}, "text": ""}, "dice": {"d6": [1, 2], "d10": [], "d20": []}}
+    out = Engine._dumps(env)
+    assert " " not in out.replace("Hello there", "")
+    got = json.loads(out)
+    assert got["game"] == {"e": 0, "f": False, "g": [{"i": 1}]}, "empty values go, zero and false stay"
+    assert got["request"] == env["request"] and got["dice"] == env["dice"] and got["mode"] == "intake"
+    monkeypatch.setattr(config, "ENVELOPE_COMPACT", False)
+    assert json.loads(Engine._dumps(env)) == env
+
+
+def test_dice_are_proportional_to_what_the_request_can_need():
+    from server.engine import Engine
+    n = lambda d: (len(d["d6"]), len(d["d10"]), len(d["d20"]))  # noqa: E731
+    assert n(Engine._dice("intake", {"kind": "free_query"}, 1)) == config.DICE_SMALL
+    assert n(Engine._dice("intake", {"kind": "character_submission"}, 1)) == config.DICE_SMALL
+    assert n(Engine._dice("intake", {"kind": "action"}, 1)) == config.DICE_ACTION
+    assert n(Engine._dice("intake", {"kind": "decision"}, 1)) == config.DICE_ACTION
+    assert n(Engine._dice("intake", {"kind": "action"}, 1, 2)) == tuple(2 * x for x in config.DICE_ACTION), "a needs_dice retry doubles"
+    assert n(Engine._dice("resolve_turn", None, 3)) == (130, 30, 30), "the turn close grows with the characters"
+
+
+def test_the_envelope_the_ai_master_gets_is_smaller_and_still_valid_json(monkeypatch):
+    gm = ScriptedGM(standard_gm)
+    eng = Engine(MemoryStore(), gm, now_fn=lambda: datetime(2026, 11, 1, 9, 0, tzinfo=timezone.utc))
+    gid, cid = start_solo(eng)
+    sizes = {}
+    for flag in (True, False):
+        monkeypatch.setattr(config, "ENVELOPE_COMPACT", flag)
+        n = len(gm.calls)
+        eng.submit_action("p_jorge", gid, "free_query", "Look around.", cid)
+        sizes[flag] = len(json.dumps(gm.calls[n][1], ensure_ascii=False, separators=(",", ":")))
+    assert sizes[True] < sizes[False] * 0.8, sizes
