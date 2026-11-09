@@ -1,4 +1,5 @@
 """Environment-driven settings. Nothing here touches the network."""
+import json
 import os
 from pathlib import Path
 
@@ -134,3 +135,22 @@ CHAIN_QUICK_RETRIES = int(os.environ.get("CHAIN_QUICK_RETRIES", "1"))
 CHAIN_QUICK_BUDGET_SECONDS = float(os.environ.get("CHAIN_QUICK_BUDGET_SECONDS", "8"))
 CHAIN_TIMEOUT_SECONDS = int(os.environ.get("CHAIN_TIMEOUT_SECONDS", "45"))
 LIGHT_BREAKER_SECONDS = int(os.environ.get("LIGHT_BREAKER_SECONDS", "120"))  # how long a failed light model is left alone (0 = not at all)
+
+# Per-model free-tier limits (requests a minute, input tokens a minute, requests a day), read by the owner from the AI Studio "Rate limit" page of the
+# project on 2026-11-09. The server counts its own calls against them and tries a model that is out of headroom last. Override with
+# GEMINI_MODEL_LIMITS='{"gemini-3.6-flash": {"rpm": 10, "tpm": 1000000, "rpd": 1000}}' (e.g. on a paid tier). A model that is not listed has no limit here.
+MODEL_LIMITS = {
+    "gemini-3.5-flash-lite": {"rpm": 15, "tpm": 250000, "rpd": 500},
+    "gemini-3.1-flash-lite": {"rpm": 15, "tpm": 250000, "rpd": 500},
+    "gemini-3.6-flash": {"rpm": 5, "tpm": 250000, "rpd": 20},
+    "gemini-3.5-flash": {"rpm": 5, "tpm": 250000, "rpd": 20},
+    "gemini-3.8-flash": {"rpm": 5, "tpm": 250000, "rpd": 20},
+    "gemini-3.7-flash": {"rpm": 5, "tpm": 250000, "rpd": 20},
+}
+try:
+    for _m, _l in json.loads(os.environ.get("GEMINI_MODEL_LIMITS", "{}") or "{}").items():
+        MODEL_LIMITS[_m] = {**MODEL_LIMITS.get(_m, {}), **_l}
+except ValueError:
+    pass
+MODEL_LIMIT_MARGIN = float(os.environ.get("MODEL_LIMIT_MARGIN", "0.9"))  # use at most this share of a limit; the rest is for the last-resort try
+CHARS_PER_TOKEN = float(os.environ.get("CHARS_PER_TOKEN", "3.5"))  # to estimate a request's input tokens before sending it
