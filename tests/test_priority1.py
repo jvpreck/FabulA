@@ -272,3 +272,41 @@ def test_structured_output_can_be_switched_off(monkeypatch):
 def test_structured_output_is_off_by_default():
     """The schema in server/schema.py leaves the objects of the contract empty (see its docstring): it must not be sent unless asked for."""
     assert config.GEMINI_STRUCTURED_OUTPUT is False and GeminiGM(usage=None)._structured is False
+
+
+def test_no_object_in_the_response_schema_is_left_bare():
+    """An object with neither properties nor additionalProperties comes back from the provider as {} (the incident of 2026-11-08)."""
+    assert schema.bare_objects() == []
+    assert schema.bare_objects({"type": "object", "properties": {"patch": {"type": "object"}}}) == ["$.patch"], "the walker does find one"
+
+
+def test_every_scripted_answer_of_the_tests_fits_the_schema():
+    from test_engine import standard_gm
+    env = {"mode": "intake", "game": {"id": "g", "clock": {"turn": 1}}, "characters": [{"id": "c", "name": "X"}],
+           "request": {"kind": "action", "text": "wait", "player_id": "p", "character_id": "c"}}
+    assert schema.check(standard_gm(env, 1)) == []
+    env["request"].update(kind="character_submission", payload={})
+    assert schema.check(standard_gm(env, 1)) == []
+
+
+def test_the_validator_understands_type_lists_any_value_and_closed_objects():
+    s = {"type": "object", "properties": {"a": {"type": ["string", "null"]}, "b": {}, "c": {"type": "object", "additionalProperties": False,
+                                                                                       "properties": {"x": {"type": "integer"}}}}}
+    assert schema.check({"a": None, "b": {"any": [1]}, "c": {"x": 1}}, s) == []
+    assert schema.check({"a": 3}, s) and schema.check({"c": {"y": 1}}, s) and schema.check({"c": {"x": True}}, s)
+    assert schema.check({"state_changes": [{"op": "append", "entity": "character", "id": "c", "path": "p", "doc": "Morning"}], "status": "ok"}) == []
+    assert schema.check({"state_changes": [{"op": "merge", "entity": "character", "id": "c", "patch": {"a": {"b": 1}}}], "status": "ok"}) == []
+
+
+def test_the_contract_check_catches_a_hollow_answer():
+    import sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
+    from scenario_checks import contract_problems
+    hollow = {"handling": "queued", "validation": {}, "action": {}, "state_changes": [{"op": "merge", "entity": "character", "id": "c", "patch": {}}],
+              "dice_log": [{}], "events": [{}]}
+    assert contract_problems(hollow, {"kind": "character_submission"}) and contract_problems(hollow, {"kind": "action"})
+    assert contract_problems({"validation": {"result": "pass", "checks": []}}, {"kind": "character_submission"}) == []
+    assert contract_problems({"validation": {"result": "fail", "checks": []}}, {"kind": "character_submission"})
+    good = {"handling": "autonomous", "action": {"parsed": {"blocks": [{"block": "Morning"}]}},
+            "state_changes": [{"op": "append", "entity": "character", "id": "c", "path": "turn_state.blocks_used", "doc": "Morning"}]}
+    assert contract_problems(good, {"kind": "action"}) == []

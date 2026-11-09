@@ -2,8 +2,9 @@
 on a recorded answer (every test run, no network) and on a live answer from Gemini (`FABULA_LIVE_SCENARIOS=1`, before releasing a change to
 the AI Master's instructions).
 
-Three groups:
+Four groups:
   structure  the response has the shape of the state contract (server/schema.py)
+  contract   the fields that matter arrive filled: a verdict for a character check, the parsed action, state changes with their patch/path/doc
   dice       rules fidelity: every die used comes from the server's stream, in order from the first unused value, and is logged
   secrecy    nothing the players must not learn appears in anything a player receives"""
 import json
@@ -42,6 +43,36 @@ def dice_problems(resp, env):
     return problems
 
 
+def contract_problems(resp, request=None):
+    """The fields that matter arrive FILLED, not only well-formed (the schema incident of 2026-11-08 passed every structure check while
+    `validation`, `action` and the state-change patches came back empty). `request` is the request that was sent (kind), or None."""
+    problems = []
+    kind = (request or {}).get("kind")
+    if kind == "character_submission":
+        v = resp.get("validation")
+        if not isinstance(v, dict) or v.get("result") not in ("pass", "pass_with_adjustments", "fail"):
+            problems.append("a character check ended without a verdict: validation.result is missing")
+        elif v["result"] != "pass" and not v.get("checks"):
+            problems.append("the verdict is not a pass but validation.checks is empty")
+    if kind == "action" and resp.get("handling") in ("queued", "autonomous"):
+        parsed = (resp.get("action") or {}).get("parsed")
+        if not isinstance(parsed, dict) or not parsed.get("blocks"):
+            problems.append("a queued or autonomous action came back without action.parsed.blocks")
+    for i, op in enumerate(resp.get("state_changes") or []):
+        o = op.get("op")
+        need = {"merge": ("patch",), "adjust": ("path", "delta"), "append": ("path", "doc"), "upsert": ("doc",), "remove": ("path", "item_id")}.get(o, ())
+        for k in need:
+            if k not in op or op[k] in (None, {}, ""):
+                problems.append(f"state_changes[{i}] ({o} {op.get('entity')} {op.get('id')}) has no {k}")
+    for i, d in enumerate(resp.get("dice_log") or []):
+        if not d.get("die") or d.get("value") is None:
+            problems.append(f"dice_log[{i}] is empty")
+    for i, e in enumerate(resp.get("events") or []):
+        if not e.get("summary"):
+            problems.append(f"events[{i}] has no summary")
+    return problems
+
+
 def secrecy_problems(player_facing, secrets):
     """`player_facing` is everything the players received (any JSON-able value); `secrets` are strings that must not appear in it."""
     text = json.dumps(player_facing, ensure_ascii=False).lower()
@@ -50,6 +81,6 @@ def secrecy_problems(player_facing, secrets):
 
 def run_checks(resp, env, secrets=(), player_facing=None):
     """Every problem found, by group."""
-    out = {"structure": structure_problems(resp), "dice": dice_problems(resp, env)}
+    out = {"structure": structure_problems(resp), "dice": dice_problems(resp, env), "contract": contract_problems(resp, env.get("request"))}
     out["secrecy"] = secrecy_problems(player_facing if player_facing is not None else resp.get("results"), secrets)
     return out
