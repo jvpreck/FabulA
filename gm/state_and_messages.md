@@ -114,7 +114,7 @@ An adventure file or stored adventure defines its own NPCs and locations with st
 ```json
 {
   "id":"c_iris","game_id":"g_001","player_id":"p_jorge","adventure_id":"quiet_mill_1930","ruleset_id":"example_ruleset","name":"Iris Calder","origin":"pregen","status":"active","is_alive":true,"death":null,"replaces_character_id":null,"replaced_by_character_id":null,"from_npc_id":null,
-  "participation":{"role":"host","status":"active","joined_turn":0,"missed_turns":0,"last_submitted_turn":2},
+  "participation":{"role":"host","status":"active","joined_turn":0,"missed_turns":0,"last_submitted_turn":2,"ready_turn":null},
   "language":"en",
   "settings":{"safety":{"fears":["not being believed"],"pvp_optout":false,"stop_signal":"pause"},"standing_orders":{"hold":"Stay at the lodging, rest, write up notes.","risk_tolerance":"low","perception_check":{"mode":"auto","anchor":"Tom's letter","spend":null},"default_spends":[],"never_do":["enter the clinic alone"],"reply_to_messages":true}},
   "validation":{"result":"pass","turn":0,"notes":[]},
@@ -142,7 +142,7 @@ An adventure file or stored adventure defines its own NPCs and locations with st
 - `status`: `draft` (being built), `validated` (passed, awaiting the player's confirmation), `active`, `dead`, `gone`, `committed`, `sidelined` (out of the story but alive), `npc_controlled` (a dropped player's character you run as an ally).
 - **`is_alive`** is a boolean, `false` when the character has died (the record stays, read-only). Then set `death` to `{ "turn", "day", "block", "cause", "summary" }` (`summary` player-safe) and `status` to `dead`. `gone` and `committed` characters are alive but out of play.
 - `replaces_character_id` / `replaced_by_character_id` link a dead character and its replacement. `from_npc_id` is set when built from an NPC (§3.8). `origin`: `generated`, `pregen`, `provided`, `converted`, `from_npc`.
-- `participation`: `role` `host` or `player`; `status` `active`, `away`, `paused` or `dropped`.
+- `participation`: `role` `host` or `player`; `status` `active`, `away`, `paused` or `dropped`; `ready_turn`: the turn for which the player told the engine the character is ready to pass it (equal to `clock.turn` means ready now). The server sets it; you never do.
 - `language`: the language of this character's results; starts as the player's default, can be changed.
 
 **Settings** (what the player decides about this character in this run)

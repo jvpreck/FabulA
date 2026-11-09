@@ -18,8 +18,10 @@ from .gm import GMBusy, GMError, GMUnavailable, parse
 from .images import ImageError, fit_max, overlay_name
 
 PLAYER_KINDS = {"setup_answers", "character_submission", "character_confirm", "action", "standing_orders",
-                "thread_note", "message", "decision", "free_query", "pause", "resume", "say"}
-NEEDS_CHARACTER = {"action", "standing_orders", "thread_note", "message", "character_confirm", "say", "pause", "resume"}
+                "thread_note", "message", "decision", "free_query", "pause", "resume", "say", "ready"}
+NEEDS_CHARACTER = {"action", "standing_orders", "thread_note", "message", "character_confirm", "say", "pause", "resume", "ready"}
+# TLR-01-012: after "ready to pass turn" a character sends no more actions to the engine in that turn (the client still answers alone, and the engine still answers questions)
+CLOSED_WHEN_READY = {"action", "say", "message"}
 HANDLINGS = {"answered", "queued", "autonomous", "clarify", "rejected", "resolved_turn"}
 NARRATION_LEVELS = ("low", "medium", "high")  # TLR-07-010: how much the client narrates; a setting of each player in each game
 
@@ -1813,6 +1815,11 @@ class Engine:
             if c is not None and c.get("status") in ("dead", "gone") and kind in ("action", "say", "message"):
                 raise EngineError("that character is out of play; ask for a replacement")
         cid = c["id"] if c else None
+        if c is not None and kind in CLOSED_WHEN_READY and self._is_ready(game, c):
+            raise EngineError("this character is ready to pass the turn, so it sends no more actions in this turn. To act again, withdraw it first: "
+                              "submit_action kind ready with payload {\"ready\": false}. Questions and notes are still answered.")
+        if kind == "ready":
+            return self._ready_to_pass(ws, game, player_id, c, payload)
         if kind == "say":
             return self._say(ws, game, player_id, c, text, payload)
         if kind == "action" and game["phase"] != "active":
@@ -1852,6 +1859,75 @@ class Engine:
                 extra["handling"] = "resolved_turn"
         ws = self._ws()
         return self._finish(ws, player_id, game_id, extra)
+
+    # ---- TLR-01-012: ready to pass turn. The player has played enough for this turn. The engine records it for the character (no AI Master call);
+    # when every active player is ready the turn closes at once, before its formal time.
+    @staticmethod
+    def _is_ready(game, c):
+        return (c.get("participation") or {}).get("ready_turn") == (game.get("clock") or {}).get("turn") and game.get("phase") == "active"
+
+    def _players_to_wait_for(self, ws, game):
+        """The characters whose players must be ready for the turn to close early: alive, active, and not away, paused or dropped."""
+        known = self._roster_character_ids(game)
+        return [c for c in ws.load_game_characters(game["id"])
+                if c["id"] in known and c.get("is_alive", True) and c.get("status") == "active" and c["participation"]["status"] == "active"]
+
+    def ready_summary(self, ws, game):
+        mine = self._players_to_wait_for(ws, game)
+        return {"ready": sum(1 for c in mine if self._is_ready(game, c)), "active": len(mine)}
+
+    def _ready_to_pass(self, ws, game, player_id, c, payload):
+        if game["phase"] != "active":
+            raise EngineError("the game has not started yet")
+        if c.get("status") != "active" or not c.get("is_alive", True):
+            raise EngineError("that character is out of play")
+        turn = game["clock"]["turn"]
+        want = payload.get("ready", True) is not False
+        p = c["participation"]
+        if want:
+            p["ready_turn"] = turn
+            p["last_submitted_turn"] = turn  # the player took part in this turn: not a missed turn
+            p["missed_turns"] = 0
+            if p["status"] == "away":
+                p["status"] = "active"
+        elif p.get("ready_turn") == turn:
+            p["ready_turn"] = None
+        ws.touch("character", c["id"])
+        usage = getattr(self.gm, "usage", None)
+        if usage is not None:
+            try:
+                usage.record({"level": 2, "tier": "database", "mode": "intake", "kind": "ready", "game_id": game["id"], "outcome": "ok"})
+            except Exception:
+                pass
+        ws.commit()
+        ws = self._ws()
+        game = self._game(ws, game["id"])
+        summary = self.ready_summary(ws, game)
+        extra = {"handling": "answered", "level": 2, "ready_to_pass": want, "players_ready": summary["ready"], "players_active": summary["active"]}
+        if want and summary["active"] and summary["ready"] >= summary["active"]:
+            try:
+                r = self.resolve_turn(game["id"])
+                extra["turn_resolved"] = bool(r.get("resolved"))
+                if r.get("resolved"):
+                    extra["handling"] = "resolved_turn"
+                    extra["message"] = "Everyone was ready, so the turn closed now. The results are in this answer or in get_results."
+                else:
+                    extra["message"] = self._ready_but_not_closed(game)
+            except (GeminiTrouble, AIMasterBusy):
+                extra["turn_resolved"] = False
+                extra["message"] = self._ready_but_not_closed(game)
+        elif want:
+            extra["message"] = (f"Recorded: your character is ready to pass the turn ({summary['ready']} of {summary['active']} players). The turn closes when all are ready, "
+                                f"or at {game['clock'].get('turn_closes')}. You can still ask questions; to act again send ready with {{\"ready\": false}}.")
+        else:
+            extra["message"] = "Withdrawn: the character is no longer ready, so it can act again in this turn."
+        ws = self._ws()
+        return self._finish(ws, player_id, game["id"], extra)
+
+    @staticmethod
+    def _ready_but_not_closed(game):
+        return ("Everyone is ready, but the AI Master could not be reached to close the turn. Nothing is lost: it closes as soon as it can, "
+                f"and at the latest at {game['clock'].get('turn_closes')}.")
 
     # ---- TLR-01-013: no setup phase. The game is created by one action and a character by one action; the server confirms a character whose
     # validation passed and starts the game itself when every player who joined (and as many as the host expects) has a confirmed character.
