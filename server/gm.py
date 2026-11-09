@@ -69,6 +69,65 @@ class Usage:
             self.sleep(2)
             waited += 2
 
+    # ---- per-model use against the provider's per-model limits (config.MODEL_LIMITS): requests and input tokens in the last minute, requests today.
+    # Only this server's own calls are counted, so the numbers can only be lower than the provider's; a 429 that names a quota corrects them.
+    def _model_doc(self, model):
+        now = self.now_fn()
+        key = f"model:{model}:{self._day(now)}"
+        doc, ver = self.store.get("usage", key)
+        return key, doc or {"id": key, "model": model, "day": self._day(now), "count": 0, "recent": []}, ver, now.timestamp()
+
+    def model_state(self, model):
+        key, doc, ver, t = self._model_doc(model)
+        recent = [x for x in doc.get("recent", []) if t - x[0] < 60]
+        return {"requests_today": doc.get("count", 0), "requests_minute": len(recent), "tokens_minute": sum(x[1] for x in recent)}
+
+    def model_headroom(self, model, tokens=0):
+        """'ok', or 'day' / 'minute' when sending a request of about `tokens` input tokens to `model` would pass (the margin of) its limits."""
+        lim = config.MODEL_LIMITS.get(model)
+        if not lim:
+            return "ok"
+        s = self.model_state(model)
+
+        def cap(k):
+            return max(1, int(lim[k] * config.MODEL_LIMIT_MARGIN)) if lim.get(k) else None
+
+        if cap("rpd") and s["requests_today"] >= cap("rpd"):
+            return "day"
+        if (cap("rpm") and s["requests_minute"] >= cap("rpm")) or (cap("tpm") and s["tokens_minute"] + tokens > cap("tpm")):
+            return "minute"
+        return "ok"
+
+    def model_record(self, model, tokens=0, exhausted=False):
+        """Counts one answered request of `model` (`tokens` input tokens). `exhausted`: the provider says its daily quota is gone, so count it as used up."""
+        from .db import Conflict
+        for _ in range(4):
+            key, doc, ver, t = self._model_doc(model)
+            doc["recent"] = [x for x in doc.get("recent", []) if t - x[0] < 60]
+            if exhausted:
+                doc["count"] = max(doc["count"], int(config.MODEL_LIMITS.get(model, {}).get("rpd", doc["count"])))
+            else:
+                doc["count"] += 1
+                doc["recent"].append([t, int(tokens or 0)])
+            try:
+                self.store.put("usage", key, doc, ver)
+                return True
+            except Conflict:
+                continue
+        return False
+
+    def seconds_to_reset(self):
+        """Seconds until the provider's day changes (midnight Pacific)."""
+        from datetime import timedelta
+        from zoneinfo import ZoneInfo
+        now = self.now_fn().astimezone(ZoneInfo(config.GEMINI_QUOTA_TZ))
+        nxt = (now + timedelta(days=1)).replace(hour=0, minute=0, second=5, microsecond=0)
+        return int((nxt - now).total_seconds())
+
+    def models_today(self):
+        """Each listed model: what this server has sent against the limits (the provider's own page may show more)."""
+        return {m: {**self.model_state(m), "limits": lim} for m, lim in config.MODEL_LIMITS.items()}
+
     # ---- call statistics (TLR-08-006): what every AI Master call cost, by level, tier, request type and game
     STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries", "cache_hit", "cache_created", "cache_off", "cache_stale", "breaker_open", "breaker_tripped", "fallback_used",
                    "tokens_in", "tokens_cached", "tokens_out", "tokens_thought", "latency_ms")
@@ -391,11 +450,34 @@ class GeminiGM:
         seconds = config.STRONG_BREAKER_SECONDS if seconds is None else seconds
         if seconds <= 0:
             return
+        quota = self._quota_kind(e)
+        if quota == "day":  # the daily quota is gone: nothing helps until the provider's day changes
+            seconds = self.usage.seconds_to_reset() if self.usage is not None else 3600
+            if self.usage is not None:
+                try:
+                    self.usage.model_record(model, exhausted=True)
+                except Exception:
+                    pass
+        elif quota == "minute":  # a per-minute limit: the provider says when to come back (default a little over a minute)
+            m = re.search(r"retrydelay\W+(\d+(?:\.\d+)?)s", str(e).lower())
+            seconds = min(seconds, int(float(m.group(1))) + 2) if m else min(seconds, 65)
         now = time.time()
         reason = f"{type(e).__name__} {e}"[:120]
         self._breakers[model] = {"until": now + seconds, "reason": reason, "checked": now}
         self._meta["breaker"] = "tripped"
         self._write_breaker(model, now + seconds, reason)
+
+    @staticmethod
+    def _quota_kind(e):
+        """'day' or 'minute' when the error is a quota (429) answer that names the limit that was hit, else None."""
+        m = f"{type(e).__name__} {e}".lower().replace(" ", "")
+        if "429" not in m and "resource_exhausted" not in m and "quota" not in m:
+            return None
+        if "perday" in m:
+            return "day"
+        if "perminute" in m:
+            return "minute"
+        return None
 
     def _close_breaker(self, model):
         """The strong model answered: forget an earlier failure."""
@@ -448,7 +530,17 @@ class GeminiGM:
     def _answer(self, chain, tier, level, system, user, seconds, degraded, final=False):
         """(answer, degraded note), or (None, note) when every model of the list failed in a way another model might not (`final`: raise)."""
         chain = list(chain)
-        order = [m for m in chain if not self._breaker(m)] + [m for m in chain if self._breaker(m)]
+        tokens = int((len(system) + len(user)) / config.CHARS_PER_TOKEN)
+        over = {}
+        for m in chain:  # a model that has passed its own limits is tried after the ones that have room, like a skipped one
+            try:
+                over[m] = self.usage.model_headroom(m, tokens) if self.usage is not None else "ok"
+            except Exception:
+                over[m] = "ok"
+        free = [m for m in chain if not self._breaker(m) and over[m] == "ok"]
+        order = free + [m for m in chain if m not in free and not self._breaker(m)] + [m for m in chain if self._breaker(m)]
+        if order[0] != chain[0] and over[chain[0]] != "ok" and not self._breaker(chain[0]):
+            self._meta["limit"] = f"{chain[0]} out of {over[chain[0]]} headroom"
         last_error = None
         for i, model in enumerate(order):
             quick = i < len(order) - 1
@@ -468,6 +560,11 @@ class GeminiGM:
                 self._timeout_override = None
             if len(chain) > 1 or tier == "turn":
                 self._close_breaker(model)
+            if self.usage is not None:
+                try:
+                    self.usage.model_record(model, self._meta.get("tokens_in") or tokens)
+                except Exception:
+                    pass
             if model != chain[0]:
                 self._meta["fallback"] = "used"
                 degraded = (degraded + "; " if degraded else "") + f"{tier} model {chain[0]} unavailable, answered by {model}"

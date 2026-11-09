@@ -142,6 +142,17 @@ last. If every strong model fails the light list answers and the turn record say
 without `thinking_level` is asked without it. The old single-model settings `GEMINI_MODEL_TURN` and `GEMINI_MODEL_LIGHT` still work: they go first in their list. To prefer
 `gemini-3.8-flash` again when it recovers, set `GEMINI_STRONG_MODELS=gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash`.
 
+### Limits are tracked per model
+
+The owner chose not to set up Google Cloud (it needs a payment method), so the server tracks the limits itself. `MODEL_LIMITS` in `server/config.py` holds each model's
+requests a minute, input tokens a minute and requests a day, copied by hand from the AI Studio "Rate limit" page (override with `GEMINI_MODEL_LIMITS`, a JSON object,
+for example after moving to a paid tier). The server counts its own calls per model (a note per model and day in `gm_usage`, shared by all instances) and, before a
+request, tries first the models that still have room (at most `MODEL_LIMIT_MARGIN`, 90%, of each limit, counting the request's estimated input tokens); a model that is
+out of room is tried after them, as a last resort, so the margin is spent only when nothing else is left. When Gemini answers 429 and names the quota, a daily one leaves
+the model alone until midnight Pacific for every instance and counts the day as used up; a per-minute one leaves it alone for the time Gemini asks (about a minute).
+Only this server's calls are counted, so the figures can only be lower than the provider's (my own probing is not counted), and the 429 answer corrects them.
+`gm_usage` (admin) shows `models`: what was sent against each limit today. When the limits change, update the table from the page.
+
 ## Illustrations
 
 Pictures are drawn during the player's own call (a character confirmation, an action or fetching results), up to `INLINE_IMAGE_SECONDS` (default 40), so they are listed in the same result; the result carries `picture_seconds` to show what that added. The server also queues, by itself, a picture of each place a character reaches for the first time and a portrait of each NPC met for the first time (`AUTO_PICTURES_PER_RESPONSE`, default 3), writing the prompt with a light model call from player-safe facts only.
