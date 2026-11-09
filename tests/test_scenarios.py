@@ -121,12 +121,14 @@ class HybridGM:
         self.real, self.sc = real, sc
         self.usage, self.last, self.last_meta, self.recorded = None, {}, {}, None
 
-    def call(self, system, user, tier="light"):
+    supports_effort = True  # TLR-03-018: the thinking level the engine chose for the request is passed on to the real model
+
+    def call(self, system, user, tier="light", effort=None):
         env = json.loads(user)
         req = env.get("request") or {}
         turn_close = self.sc["request"]["kind"] == "resolve_turn" and env["mode"] == "resolve_turn"
         if turn_close or (env["mode"] == "intake" and req.get("kind") == self.sc["request"]["kind"] and req.get("text") == self.sc["request"]["text"]):
-            raw = self.real.call(system, user, tier)
+            raw = self.real.call(system, user, tier, effort)
             self.last, self.last_meta, self.recorded = self.real.last, self.real.last_meta, (user, raw, system, tier)
             return raw
         return json.dumps(standard_gm(env, 0))

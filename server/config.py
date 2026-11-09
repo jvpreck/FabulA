@@ -38,6 +38,18 @@ GEMINI_MODEL_TURN = GEMINI_STRONG_MODELS[0]   # the first choice of each tier (t
 GEMINI_MODEL_LIGHT = GEMINI_LIGHT_MODELS[0]
 GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "medium")
 GEMINI_THINKING_LEVEL_TURN = os.environ.get("GEMINI_THINKING_LEVEL_TURN", GEMINI_THINKING_LEVEL)
+# TLR-03-018: thinking effort per kind of request (minimal, low, medium or high). A kind not listed uses GEMINI_THINKING_LEVEL; the turn close uses
+# GEMINI_THINKING_LEVEL_TURN. Override all of it with a JSON object in GEMINI_THINKING_BY_KIND, for example {"free_query": "low"}.
+THINKING_LEVELS = ("minimal", "low", "medium", "high")
+# Measured live on 2026-11-09 (gemini-3.5-flash-lite, about 42k tokens in): minimal used 0 thinking tokens and answered in about 3.5 s, low 0 to 1k and
+# 3.5 to 6 s, medium 1.4 to 2k and 7 to 8 s, high 2 to 2.7k and 9 to 10.5 s. The simple kinds (a question, bookkeeping) get `minimal`. `action`,
+# `character_submission` and the turn close stay at the general default until their quality has been compared over real play.
+GEMINI_THINKING_BY_KIND = {"free_query": "minimal", "setup_answers": "minimal", "join": "minimal", "game_created": "minimal", "character_confirm": "minimal",
+                           "thread_note": "minimal", "standing_orders": "minimal", "pause": "minimal", "resume": "minimal", "message": "low", "decision": "low"}
+try:
+    GEMINI_THINKING_BY_KIND.update({k: v for k, v in json.loads(os.environ.get("GEMINI_THINKING_BY_KIND", "{}")).items() if v in THINKING_LEVELS})
+except ValueError:
+    pass
 # Free-tier quotas with a little headroom (the provider's figures were 20 per day and 5 per minute, 500 per day and 10 per minute).
 GEMINI_LIMITS = {
     "turn": {"rpd": int(os.environ.get("GEMINI_TURN_RPD", "18")), "rpm": int(os.environ.get("GEMINI_TURN_RPM", "4"))},

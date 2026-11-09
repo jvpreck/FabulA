@@ -335,7 +335,8 @@ class Engine:
             outcome = "ok"
             try:
                 try:
-                    resp = parse(self.gm.call(system, self._dumps(env), tier=tier))
+                    extra = {"effort": self._effort(mode, request)} if getattr(self.gm, "supports_effort", False) else {}
+                    resp = parse(self.gm.call(system, self._dumps(env), tier=tier, **extra))
                 except GMBusy as e:
                     outcome = "failed"
                     raise AIMasterBusy(str(e))
@@ -386,6 +387,14 @@ class Engine:
         if kind == "character_submission":  # TLR-03-017: checking a sheet needs the ruleset's character rules, not the whole game
             return "check"
         return "setup" if kind in cls.SETUP_KINDS else "play"
+
+    @staticmethod
+    def _effort(mode, request):
+        """TLR-03-018: the thinking level for this request. The turn close has its own; the other kinds use the table in the configuration,
+        or the general default."""
+        if mode == "resolve_turn":
+            return config.GEMINI_THINKING_LEVEL_TURN
+        return config.GEMINI_THINKING_BY_KIND.get((request or {}).get("kind")) or config.GEMINI_THINKING_LEVEL
 
     def _log_call(self, game_id, level, tier, mode, request, outcome, attempt):
         """TLR-08-006: one line in the day's statistics for every AI Master call. It never blocks or fails a request."""

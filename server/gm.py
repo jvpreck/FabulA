@@ -415,12 +415,14 @@ class GeminiGM:
                 waited += took + delay
                 attempt += 1
 
-    def call(self, system: str, user: str, tier: str = "light") -> str:
+    supports_effort = True  # call() accepts `effort`, the thinking level for this request (TLR-03-018)
+
+    def call(self, system: str, user: str, tier: str = "light", effort: str | None = None) -> str:
         import time
         self._meta = {}
         t0 = time.monotonic()
         try:
-            return self._call(system, user, tier)
+            return self._call(system, user, tier, effort)
         finally:
             self._meta["latency_ms"] = int((time.monotonic() - t0) * 1000)
             self.last_meta = dict(self._meta)
@@ -497,7 +499,8 @@ class GeminiGM:
         except Exception:
             pass
 
-    def _call(self, system: str, user: str, tier: str = "light") -> str:
+    def _call(self, system: str, user: str, tier: str = "light", effort: str | None = None) -> str:
+        effort = effort if effort in config.THINKING_LEVELS else None
         degraded = None
         if tier == "turn":
             chain = config.GEMINI_STRONG_MODELS
@@ -510,7 +513,7 @@ class GeminiGM:
                 if r == "minute":
                     raise GMBusy("the strong AI Master model is at its per-minute limit; the turn will be retried shortly")
                 if r == "ok":
-                    out, note = self._answer(chain, "turn", config.GEMINI_THINKING_LEVEL_TURN, system, user, config.STRONG_BREAKER_SECONDS, degraded)
+                    out, note = self._answer(chain, "turn", effort or config.GEMINI_THINKING_LEVEL_TURN, system, user, config.STRONG_BREAKER_SECONDS, degraded)
                     if out is not None:
                         return out
                     degraded = note
@@ -520,7 +523,7 @@ class GeminiGM:
         if r != "ok":
             raise GMBusy("the AI Master is busy right now (request quota). Please try again in a few minutes"
                          if r == "minute" else "the AI Master has reached its daily request quota. Please try again tomorrow")
-        out, note = self._answer(config.GEMINI_LIGHT_MODELS, "light", config.GEMINI_THINKING_LEVEL, system, user, config.LIGHT_BREAKER_SECONDS, degraded, final=True)
+        out, note = self._answer(config.GEMINI_LIGHT_MODELS, "light", effort or config.GEMINI_THINKING_LEVEL, system, user, config.LIGHT_BREAKER_SECONDS, degraded, final=True)
         return out
 
     # ---- an ordered list of models per tier. The first one that answers is used. A model that times out, answers a 5xx or is over its quota
@@ -530,6 +533,7 @@ class GeminiGM:
     def _answer(self, chain, tier, level, system, user, seconds, degraded, final=False):
         """(answer, degraded note), or (None, note) when every model of the list failed in a way another model might not (`final`: raise)."""
         chain = list(chain)
+        self._meta["thinking_level"] = level
         tokens = int((len(system) + len(user)) / config.CHARS_PER_TOKEN)
         over = {}
         for m in chain:  # a model that has passed its own limits is tried after the ones that have room, like a skipped one
