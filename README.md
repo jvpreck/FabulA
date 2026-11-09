@@ -89,14 +89,56 @@ The free tier gives a strong model few requests (about 20 a day, 5 a minute) and
 
 | Tier | Model (default) | Used for |
 |---|---|---|
-| `turn` (strong) | `gemini-3.8-flash` | Closing a turn with every player's actions (arbitration, results for all), and cross-checking a character sheet |
-| `light` | `gemini-3.5-flash-lite` | Everything a single player does between turns: autonomous actions, queries, setup, joining |
+| `turn` (strong) | `gemini-3.6-flash`, then `gemini-3.5-flash`, then `gemini-3.8-flash` | Closing a turn with every player's actions (arbitration, results for all), and cross-checking a character sheet |
+| `light` | `gemini-3.5-flash-lite`, then `gemini-3.1-flash-lite`, then `gemini-3.6-flash` | Everything a single player does between turns: autonomous actions, queries, setup, joining |
 
 - **Counting.** Each request is counted per tier in the `gm_usage` table, per day (the provider's day, Pacific time) and per minute, so every server instance shares the count. The guards sit a little under the real limits.
 - **Strong model over its per-minute limit:** the turn is **deferred**, not degraded. It stays open and the next scheduler run (every 5 minutes) retries it.
 - **Strong model's daily quota used up, or it fails with a quota or server error:** the turn is resolved by the light model, and the turn record shows `gm_model` and `gm_degraded` so you can see it. Other errors (a real bug) are not hidden by the fallback.
 - **Light model over its limits:** the player's request waits a few seconds, then gets a plain "the AI Master is busy, try again" message.
 - **Sizing.** Three or four games with 24-hour turns use about 4 strong requests a day plus the character checks, far under the 18 a day guard. Retries after an invalid AI answer each count as a request. The host command `gm_usage` shows today's counts.
+
+## Gemini models on the free tier (probed 2026-11-09)
+
+The documentation of what a free tier allows does not match what the API does, so the models were probed with the owner's key (`python tools/probe_models.py`:
+reachability and speed, a full-size prompt of about 52,500 tokens asked twice for caching and limits, explicit caching, and the real tasks, a character
+check that must end in a verdict and an autonomous action that must carry its parse). Re-run it when Google changes something. Results:
+
+| Model | Free tier on this key | Speed (tiny / full prompt) | Implicit cache | Explicit cache | Limits seen | Real tasks | Role |
+|---|---|---|---|---|---|---|---|
+| `gemini-3.5-flash-lite` | yes | 0.5 s / 4 to 5 s | yes (49,055 of 52,518 tokens on a repeat) | no (limit 0) | 250,000 input tokens a minute | pass, pass | light, first |
+| `gemini-3.1-flash-lite` | yes | 4.3 s / 4 to 5 s | yes (49,056) | no (limit 0) | none reached | pass, pass | light, second |
+| `gemini-3.6-flash` | yes (the docs say not) | 2.6 s / 3 to 5 s | yes (50,472) | no (limit 0) | **20 requests a day** (used up by the probe) | pass, pass | strong, first; light, last resort |
+| `gemini-3.5-flash` | yes | 0.9 s / 3 s | yes (50,472) | no (limit 0) | **20 requests a day**, 5 a minute | pass, pass (live scenarios) | strong, second |
+| `gemini-3.8-flash` | answers 503 "high demand" or 504 after 100 to 150 s, for more than a day | n/a | n/a | no (limit 0) | 20 a day | never completed | strong, last resort |
+| `gemini-3.7-flash` | v1: 503. v1beta: 429, 20 requests a day used up | n/a | n/a | n/a | 20 a day | n/a | not used |
+| `gemini-4-argon` | no: free-tier request limit 0 | n/a | n/a | n/a | 0 | n/a | not used |
+| `gemini-3.1-pro-preview` | no: 404 on v1; free-tier limit 0 on v1beta | n/a | n/a | n/a | 0 | n/a | not used |
+| `gemini-3-flash-preview` | only on v1beta (404 on v1): 2.0 s | n/a | n/a | n/a | n/a | not tested | not used (the server uses v1) |
+| `gemini-2.5-flash`, `-flash-lite`, `-pro` | no: 404 "no longer available to new users" | n/a | n/a | n/a | n/a | n/a | not used |
+| `gemma-4-26b-a4b-it` | tiny prompts only: 16,000 input tokens a minute, no `thinking_level` | 4.8 s / blocked | n/a | n/a | 16,000 tokens a minute | n/a | not used (the prompt is 52,500 tokens) |
+| `gemma-4-31b-it` | 500 INTERNAL | n/a | n/a | n/a | n/a | n/a | not used |
+
+Not tested: image, audio, live, embedding, robotics, music, video and agent models (not text generation), and the models the documentation marks as shut down.
+Explicit caching is refused for every model (`TotalCachedContentStorageTokensPerModelFreeTier`, limit 0), whatever the pricing page says; implicit caching works on
+all four usable models and needs nothing from the server except stable instructions at the start of the prompt, which is how the prompt is built. Quotas are per model
+and per day (Pacific time): every non-lite flash model has 20 requests a day (3.5, 3.6, 3.7 and 3.8 were each seen at 20), which is enough for closing turns and not for
+player traffic; the lite models carry the light tier. A model that is over its quota is skipped and the next one answers.
+
+### Which model answers: ordered lists
+
+`GEMINI_STRONG_MODELS` (closing a turn: little traffic, quality first) and `GEMINI_LIGHT_MODELS` (everything a player does between turns: many requests, speed and a high
+daily allowance first) are ordered lists, defaults:
+
+- strong: `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.8-flash`
+- light: `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.6-flash`
+
+The first model that answers is used. A model that times out, answers a 5xx or is over its quota is left alone for `STRONG_BREAKER_SECONDS` (900) or `LIGHT_BREAKER_SECONDS`
+(120) by every server instance (a note in `gm_usage`), and the next one answers. A model with another behind it gives up fast: `CHAIN_QUICK_RETRIES` (1) retry, at most
+`CHAIN_QUICK_BUDGET_SECONDS` (8) of waiting, and a `CHAIN_TIMEOUT_SECONDS` (45) timeout; the last one gets the full retries and the full timeout. Models that were just skipped come
+last. If every strong model fails the light list answers and the turn record says so (`gm_degraded`); if every light model fails the player is told Gemini is not answering. A model
+without `thinking_level` is asked without it. The old single-model settings `GEMINI_MODEL_TURN` and `GEMINI_MODEL_LIGHT` still work: they go first in their list. To prefer
+`gemini-3.8-flash` again when it recovers, set `GEMINI_STRONG_MODELS=gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash`.
 
 ## Illustrations
 
@@ -134,7 +176,7 @@ Each game has a setting `illustrations` (`on` by default when the server can dra
 1. Run `supabase/schema.sql` in the Supabase SQL editor (it is safe to run again: it adds the `gm_tasks`, `gm_keys`, `gm_usage` and `gm_images` tables and the private `gm-images` storage bucket). Run it again after every update of the repository: it also installs the `gm_commit` function, which saves all the records of a request in one database transaction (until it is installed the server saves them one by one, as before).
 2. Environment variables on Vercel:
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-   - `GEMINI_API_KEY`. Optional: `GEMINI_MODEL_TURN` (default `gemini-3.8-flash`), `GEMINI_MODEL_LIGHT` (default `gemini-3.5-flash-lite`; the old `GEMINI_MODEL` still works as its name), `GEMINI_THINKING_LEVEL` (default `medium`) and `GEMINI_THINKING_LEVEL_TURN`
+   - `GEMINI_API_KEY`. Optional: `GEMINI_STRONG_MODELS` and `GEMINI_LIGHT_MODELS` (ordered lists of models, comma separated; see "Gemini models on the free tier"; the old `GEMINI_MODEL_TURN` and `GEMINI_MODEL_LIGHT` still go first in their list), `GEMINI_THINKING_LEVEL` (default `medium`) and `GEMINI_THINKING_LEVEL_TURN`
    - Optional: `GEMINI_STRUCTURED_OUTPUT` (default `off`; `on` makes Gemini answer in the shape in `server/schema.py`, with extra requirements per request kind: a character check must return a verdict, an action its parse). Found live (2026-11-09, gemini-3.5-flash-lite): with it on, the four live scenarios pass and the fields arrive, but the model's answers are 5 to 20 times shorter (26 to 160 output tokens against 570 to 1,100), so the facts a player gets are thinner. Keep it off unless that changes. A schema the provider finds too large is refused with a bare 400; the server then stops sending it.
    - Optional token controls (all default `on` or `auto`): `PROMPT_SLIM` sends the AI Master only the sections of its instructions that the kind of request needs (`gm/README.md`). `GEMINI_CONTEXT_CACHE` (`auto` or `off`) stores the instructions once at Gemini and refers to that copy: if Gemini refuses (the free tier does not offer it) the server sends the text as before, notes it in the call statistics (`cache_off`, `cache_note`) and tries again after `CACHE_OFF_SECONDS` (3600). `ENVELOPE_RELEVANT` limits what a request of one character is told about events, messages, earlier results, NPCs and places to what concerns that character (the turn close always sees everything; a world under `ENVELOPE_WORLD_NARROW_CHARS`, 12000, is sent whole).
    - Optional: `CHARACTER_CHECK_TIER` (`light` by default, or `turn`): which model cross-checks a character sheet while the player waits. `STRONG_BREAKER_SECONDS` (900; 0 turns it off): after the strong model times out or answers a server error, it is skipped for this long (by every server instance) and the light model answers at once; `gm_usage` shows `skipped_models`.

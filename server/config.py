@@ -16,8 +16,25 @@ RULESETS_DIR = ROOT / "rulesets"
 
 # Two tiers. "turn" is the strong, scarce model: closing a turn with every player's actions, and checking a character sheet.
 # "light" is the fast, plentiful model: everything a single player does between turns. GEMINI_MODEL is the old name for the light model.
-GEMINI_MODEL_TURN = os.environ.get("GEMINI_MODEL_TURN", "gemini-3.8-flash")
-GEMINI_MODEL_LIGHT = os.environ.get("GEMINI_MODEL_LIGHT") or os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+def _models(env, legacy, default):
+    """An ordered list of model names: the old single-model setting (if set) first, then the list setting, or the default list."""
+    listed = [m.strip() for m in os.environ.get(env, "").split(",") if m.strip()]
+    first = [m for m in (os.environ.get(x, "").strip() for x in legacy) if m]
+    out = []
+    for m in first + (listed or default):
+        if m not in out:
+            out.append(m)
+    return out
+
+
+# Ordered by what the owner's free-tier key can actually do (probed live 2026-11-09, see README "Gemini models"): the first model that answers
+# is used; a model that times out, answers a 5xx or is over its quota is skipped for a while and the next one answers.
+# STRONG is for closing a turn (little traffic, quality first, 20 requests a day per model on the free tier); LIGHT is for what a player does
+# between turns (many requests, speed and a high daily allowance first).
+GEMINI_STRONG_MODELS = _models("GEMINI_STRONG_MODELS", ["GEMINI_MODEL_TURN"], ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.8-flash"])
+GEMINI_LIGHT_MODELS = _models("GEMINI_LIGHT_MODELS", ["GEMINI_MODEL_LIGHT", "GEMINI_MODEL"], ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"])
+GEMINI_MODEL_TURN = GEMINI_STRONG_MODELS[0]   # the first choice of each tier (the names older code and the host status use)
+GEMINI_MODEL_LIGHT = GEMINI_LIGHT_MODELS[0]
 GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "medium")
 GEMINI_THINKING_LEVEL_TURN = os.environ.get("GEMINI_THINKING_LEVEL_TURN", GEMINI_THINKING_LEVEL)
 # Free-tier quotas with a little headroom (the provider's figures were 20 per day and 5 per minute, 500 per day and 10 per minute).
@@ -111,3 +128,9 @@ ENVELOPE_WORLD_NARROW_CHARS = int(os.environ.get("ENVELOPE_WORLD_NARROW_CHARS", 
 # is made by the light model unless CHARACTER_CHECK_TIER=turn, and a strong model that has just failed is skipped for a while.
 CHARACTER_CHECK_TIER = "turn" if os.environ.get("CHARACTER_CHECK_TIER", "light").lower() == "turn" else "light"
 STRONG_BREAKER_SECONDS = int(os.environ.get("STRONG_BREAKER_SECONDS", "900"))  # 0 never skips the strong model
+
+# A model that has another behind it in its list gives up fast: one quick retry, a short wait, a shorter timeout (the last one gets the full ones).
+CHAIN_QUICK_RETRIES = int(os.environ.get("CHAIN_QUICK_RETRIES", "1"))
+CHAIN_QUICK_BUDGET_SECONDS = float(os.environ.get("CHAIN_QUICK_BUDGET_SECONDS", "8"))
+CHAIN_TIMEOUT_SECONDS = int(os.environ.get("CHAIN_TIMEOUT_SECONDS", "45"))
+LIGHT_BREAKER_SECONDS = int(os.environ.get("LIGHT_BREAKER_SECONDS", "120"))  # how long a failed light model is left alone (0 = not at all)

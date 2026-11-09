@@ -363,7 +363,7 @@ class Engine:
             meta = dict(getattr(self.gm, "last_meta", None) or {})
             usage.record({"level": level, "tier": (getattr(self.gm, "last", None) or {}).get("tier") or tier, "mode": mode,
                           "kind": (request or {}).get("kind") or "-", "game_id": game_id, "outcome": outcome,
-                          "retries": int(meta.get("retries") or 0) + (1 if attempt else 0), "cache": meta.get("cache"), "breaker": meta.get("breaker"), **{k: meta.get(k) for k in (
+                          "retries": int(meta.get("retries") or 0) + (1 if attempt else 0), "cache": meta.get("cache"), "breaker": meta.get("breaker"), "fallback": meta.get("fallback"), **{k: meta.get(k) for k in (
                               "latency_ms", "tokens_in", "tokens_cached", "tokens_out", "tokens_thought")}})
         except Exception:
             pass

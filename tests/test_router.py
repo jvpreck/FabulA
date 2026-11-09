@@ -10,6 +10,13 @@ from server.gm import GeminiGM, GMBusy, GMUnavailable, Usage
 from test_engine import ScriptedGM, standard_gm, start_solo, CHECK
 
 
+@pytest.fixture(autouse=True)
+def no_light_fallback(monkeypatch):
+    """These tests are about one model per tier; the ordered lists of models have their own tests (test_model_chain.py)."""
+    monkeypatch.setattr(config, "GEMINI_STRONG_MODELS", [config.GEMINI_MODEL_TURN])
+    monkeypatch.setattr(config, "GEMINI_LIGHT_MODELS", [config.GEMINI_MODEL_LIGHT])
+
+
 class Clock:
     def __init__(self):
         self.t = datetime(2026, 11, 1, 9, tzinfo=timezone.utc)
@@ -73,7 +80,7 @@ class FakeGemini(GeminiGM):
 
 
 def test_models_and_thinking_level_are_configured():
-    assert config.GEMINI_MODEL_TURN == "gemini-3.8-flash" and config.GEMINI_MODEL_LIGHT == "gemini-3.5-flash-lite"
+    assert config.GEMINI_MODEL_TURN == "gemini-3.6-flash" and config.GEMINI_MODEL_LIGHT == "gemini-3.5-flash-lite"
     assert config.GEMINI_THINKING_LEVEL == "medium" and config.GEMINI_THINKING_LEVEL_TURN == "medium"
 
 

@@ -70,7 +70,7 @@ class Usage:
             waited += 2
 
     # ---- call statistics (TLR-08-006): what every AI Master call cost, by level, tier, request type and game
-    STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries", "cache_hit", "cache_created", "cache_off", "cache_stale", "breaker_open", "breaker_tripped",
+    STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries", "cache_hit", "cache_created", "cache_off", "cache_stale", "breaker_open", "breaker_tripped", "fallback_used",
                    "tokens_in", "tokens_cached", "tokens_out", "tokens_thought", "latency_ms")
 
     def record(self, entry):
@@ -92,6 +92,8 @@ class Usage:
                 if outcome in bucket:
                     bucket[outcome] += 1
                 bucket["retries"] += int(entry.get("retries") or 0)
+                if entry.get("fallback") == "used":
+                    bucket["fallback_used"] += 1
                 if entry.get("breaker") in ("open", "tripped"):
                     bucket["breaker_" + entry["breaker"]] += 1
                 cache = (entry.get("cache") or "").split(":")[0]
@@ -151,6 +153,8 @@ class GeminiGM:
         self._api_key = api_key
         self.usage = usage
         self.last = {}
+        self._timeout_override = None
+        self._no_thinking = set()  # models that refused thinking_level
         self._breakers = {}  # model -> {"until", "reason", "checked"}: a strong model that keeps failing is left alone for a while
         self._meta = {}  # token counts and retries of the call in progress
         self._structured = config.GEMINI_STRUCTURED_OUTPUT
@@ -181,12 +185,13 @@ class GeminiGM:
         name = self._cached(model, system)
         base = dict(
             response_mime_type="application/json",
-            thinking_config=types.ThinkingConfig(thinking_level=level),
-            http_options=types.HttpOptions(timeout=config.GEMINI_TIMEOUT_SECONDS * 1000),
+            http_options=types.HttpOptions(timeout=(self._timeout_override or config.GEMINI_TIMEOUT_SECONDS) * 1000),
         )
 
         def run(use_cache, structured):
             cfg = dict(base)
+            if model not in self._no_thinking:  # a model without thinking_level (older or open models) is asked without it
+                cfg["thinking_config"] = types.ThinkingConfig(thinking_level=level)
             if use_cache:  # TLR-03-011: the instructions are already at the provider; they cannot be sent again as a system instruction
                 cfg["cached_content"] = name
             else:
@@ -206,6 +211,9 @@ class GeminiGM:
                     self._forget_cache(model, system)
                     self._meta["cache"] = "stale: " + str(e)[:80]
                     use_cache = False
+                elif model not in self._no_thinking and self._thinking_rejected(e):  # this model has no thinking_level: remember, and ask without
+                    self._no_thinking.add(model)
+                    self._meta["thinking"] = "not supported by " + model
                 elif self._structured and self._schema_rejected(e):  # the provider does not accept the schema: play on without it, and say so
                     self._structured = False
                     self._meta["schema_disabled"] = str(e)[:200]
@@ -295,6 +303,11 @@ class GeminiGM:
         return entry["name"]
 
     @staticmethod
+    def _thinking_rejected(e):
+        m = f"{type(e).__name__} {e}".lower()
+        return "thinking" in m and ("400" in m or "invalid_argument" in m or "not supported" in m or "unsupported" in m)
+
+    @staticmethod
     def _schema_rejected(e):
         m = f"{type(e).__name__} {e}".lower()
         # the provider's refusal of a schema is often a bare "400 INVALID_ARGUMENT: Request contains an invalid argument" (seen 2026-11-09),
@@ -318,8 +331,10 @@ class GeminiGM:
             return False
         return bool(re.search(r"\b(500|502|503|504)\b", m)) or any(x in m for x in ("unavailable", "overloaded", "high demand", "internal error"))
 
-    def _generate_retrying(self, model, level, system, user):
+    def _generate_retrying(self, model, level, system, user, retries=None, budget=None):
         """One model call, retried with exponential backoff and jitter on transient errors, within a total waiting budget."""
+        retries = config.GEMINI_RETRIES if retries is None else retries
+        budget = config.GEMINI_RETRY_BUDGET_SECONDS if budget is None else budget
         import random
         import time
         waited = 0.0
@@ -330,12 +345,12 @@ class GeminiGM:
                 return self._generate(model, level, system, user)
             except Exception as e:
                 took = time.monotonic() - started
-                if attempt >= config.GEMINI_RETRIES or not self._transient(e):
+                if attempt >= retries or not self._transient(e):
                     raise
                 if took > config.GEMINI_RETRY_MAX_CALL_SECONDS:  # a 504 that came back after ~100 s is a timeout: retrying costs another 100 s
                     raise
                 delay = config.GEMINI_RETRY_BASE_SECONDS * (3 ** attempt) * (1 + random.random() * 0.25)
-                if waited + took + delay > config.GEMINI_RETRY_BUDGET_SECONDS:  # the budget is total time, calls included
+                if waited + took + delay > budget:  # the budget is total time, calls included
                     raise
                 self._sleep(delay)
                 waited += took + delay
@@ -371,15 +386,16 @@ class GeminiGM:
             b = self._breakers[model] = {"until": (note or {}).get("until", 0), "reason": (note or {}).get("reason", ""), "checked": now}
         return b if b["until"] > now else None
 
-    def _trip_breaker(self, model, e):
+    def _trip_breaker(self, model, e, seconds=None):
         import time
-        if config.STRONG_BREAKER_SECONDS <= 0:
+        seconds = config.STRONG_BREAKER_SECONDS if seconds is None else seconds
+        if seconds <= 0:
             return
         now = time.time()
         reason = f"{type(e).__name__} {e}"[:120]
-        self._breakers[model] = {"until": now + config.STRONG_BREAKER_SECONDS, "reason": reason, "checked": now}
+        self._breakers[model] = {"until": now + seconds, "reason": reason, "checked": now}
         self._meta["breaker"] = "tripped"
-        self._write_breaker(model, now + config.STRONG_BREAKER_SECONDS, reason)
+        self._write_breaker(model, now + seconds, reason)
 
     def _close_breaker(self, model):
         """The strong model answered: forget an earlier failure."""
@@ -402,40 +418,65 @@ class GeminiGM:
     def _call(self, system: str, user: str, tier: str = "light") -> str:
         degraded = None
         if tier == "turn":
-            br = self._breaker(config.GEMINI_MODEL_TURN)
-            if br:
+            chain = config.GEMINI_STRONG_MODELS
+            if all(self._breaker(m) for m in chain):  # every strong model has just failed: do not wait for them again, and do not spend their quota
                 self._meta["breaker"] = "open"
-                degraded = f"strong model skipped for {int(br['until'] - __import__('time').time())} more seconds after: {br['reason']}"
-                r = None
+                br = self._breaker(chain[0])
+                degraded = f"strong models skipped for {int(br['until'] - __import__('time').time())} more seconds after: {br['reason']}"
             else:
                 r = self.usage.reserve("turn") if self.usage else "ok"
-            if r == "minute":
-                raise GMBusy("the strong AI Master model is at its per-minute limit; the turn will be retried shortly")
-            if r == "ok":
-                try:
-                    out = self._generate_retrying(config.GEMINI_MODEL_TURN, config.GEMINI_THINKING_LEVEL_TURN, system, user)
-                    self.last = {"tier": "turn", "model": config.GEMINI_MODEL_TURN, "degraded": None}
-                    self._close_breaker(config.GEMINI_MODEL_TURN)
-                    return out
-                except Exception as e:
-                    if not self._retryable(e):
-                        raise
-                    degraded = "strong model unavailable (" + type(e).__name__ + ")"
-                    self._trip_breaker(config.GEMINI_MODEL_TURN, e)
-            elif r == "day":
-                degraded = "strong model daily quota used up"
+                if r == "minute":
+                    raise GMBusy("the strong AI Master model is at its per-minute limit; the turn will be retried shortly")
+                if r == "ok":
+                    out, note = self._answer(chain, "turn", config.GEMINI_THINKING_LEVEL_TURN, system, user, config.STRONG_BREAKER_SECONDS, degraded)
+                    if out is not None:
+                        return out
+                    degraded = note
+                else:
+                    degraded = "strong model daily quota used up"
         r = (self.usage.reserve_waiting("light") if self.usage else "ok")
         if r != "ok":
             raise GMBusy("the AI Master is busy right now (request quota). Please try again in a few minutes"
                          if r == "minute" else "the AI Master has reached its daily request quota. Please try again tomorrow")
-        try:
-            out = self._generate_retrying(config.GEMINI_MODEL_LIGHT, config.GEMINI_THINKING_LEVEL, system, user)
-        except Exception as e:
-            if self._retryable(e):  # overloaded, unavailable, quota or timeout: Gemini is not answering
-                raise GMUnavailable(type(e).__name__ + ": " + str(e)[:200]) from e
-            raise
-        self.last = {"tier": "light", "model": config.GEMINI_MODEL_LIGHT, "degraded": degraded}
+        out, note = self._answer(config.GEMINI_LIGHT_MODELS, "light", config.GEMINI_THINKING_LEVEL, system, user, config.LIGHT_BREAKER_SECONDS, degraded, final=True)
         return out
+
+    # ---- an ordered list of models per tier. The first one that answers is used. A model that times out, answers a 5xx or is over its quota
+    # is left alone for `seconds` (a note in the database, shared by every instance) and the next one is tried; a model that has another behind
+    # it gives up fast (one quick retry, a shorter timeout); models that were just skipped are tried last. Found 2026-11-09: three 503s from
+    # the light model failed a player's step, and the strong model had not answered anything for a day.
+    def _answer(self, chain, tier, level, system, user, seconds, degraded, final=False):
+        """(answer, degraded note), or (None, note) when every model of the list failed in a way another model might not (`final`: raise)."""
+        chain = list(chain)
+        order = [m for m in chain if not self._breaker(m)] + [m for m in chain if self._breaker(m)]
+        last_error = None
+        for i, model in enumerate(order):
+            quick = i < len(order) - 1
+            self._timeout_override = config.CHAIN_TIMEOUT_SECONDS if quick else None
+            try:
+                out = self._generate_retrying(model, level, system, user,
+                                              retries=config.CHAIN_QUICK_RETRIES if quick else None,
+                                              budget=config.CHAIN_QUICK_BUDGET_SECONDS if quick else None)
+            except Exception as e:
+                if not self._retryable(e):
+                    raise
+                last_error = e
+                if len(chain) > 1 or tier == "turn":  # a lone light model has nothing to be skipped for; the strong tier skips to the light models
+                    self._trip_breaker(model, e, seconds=seconds)
+                continue
+            finally:
+                self._timeout_override = None
+            if len(chain) > 1 or tier == "turn":
+                self._close_breaker(model)
+            if model != chain[0]:
+                self._meta["fallback"] = "used"
+                degraded = (degraded + "; " if degraded else "") + f"{tier} model {chain[0]} unavailable, answered by {model}"
+            self.last = {"tier": tier, "model": model, "degraded": degraded}
+            return out, degraded
+        note = (degraded + "; " if degraded else "") + f"{tier} models unavailable ({type(last_error).__name__})"
+        if final:
+            raise GMUnavailable(type(last_error).__name__ + ": " + str(last_error)[:200]) from last_error
+        return None, note
 
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.I)
