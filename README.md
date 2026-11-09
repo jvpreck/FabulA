@@ -106,18 +106,20 @@ check that must end in a verdict and an autonomous action that must carry its pa
 
 | Model | Free tier on this key | Speed (tiny / full prompt) | Implicit cache | Explicit cache | Limits seen | Real tasks | Role |
 |---|---|---|---|---|---|---|---|
-| `gemini-3.5-flash-lite` | yes | 0.5 s / 4 to 5 s | yes (49,055 of 52,518 tokens on a repeat) | no (limit 0) | 250,000 input tokens a minute | pass, pass | light, first |
-| `gemini-3.1-flash-lite` | yes | 4.3 s / 4 to 5 s | yes (49,056) | no (limit 0) | none reached | pass, pass | light, second |
-| `gemini-3.6-flash` | yes (the docs say not) | 2.6 s / 3 to 5 s | yes (50,472) | no (limit 0) | **20 requests a day** (used up by the probe) | pass, pass | strong, first; light, last resort |
-| `gemini-3.5-flash` | yes | 0.9 s / 3 s | yes (50,472) | no (limit 0) | **20 requests a day**, 5 a minute | pass, pass (live scenarios) | strong, second |
-| `gemini-3.8-flash` | answers 503 "high demand" or 504 after 100 to 150 s, for more than a day | n/a | n/a | no (limit 0) | 20 a day | never completed | strong, last resort |
+| `gemini-3.5-flash-lite` | yes | 0.5 s / 4 to 5 s | yes (49,055 of 52,518 tokens on a repeat) | no (limit 0) | 15 requests a minute, 250,000 input tokens a minute (the real ceiling: about 4 calls of this size a minute), 500 a day | pass, pass | light, first |
+| `gemini-3.1-flash-lite` | yes | 4.3 s / 4 to 5 s | yes (49,056) | no (limit 0) | 15 requests a minute, 250,000 tokens a minute, 500 a day | pass, pass | light, second |
+| `gemini-3.6-flash` | yes (the docs say not) | 2.6 s / 3 to 5 s | yes (50,472) | no (limit 0) | 5 requests a minute, 250,000 tokens a minute, **20 a day** (used up by the probe) | pass, pass | strong, first; light, last resort |
+| `gemini-3.5-flash` | yes | 0.9 s / 3 s | yes (50,472) | no (limit 0) | 5 requests a minute, 250,000 tokens a minute, **20 a day** | pass, pass (live scenarios) | strong, second |
+| `gemini-3.8-flash` | answers 503 "high demand" or 504 after 100 to 150 s, for more than a day | n/a | n/a | no (limit 0) | 5 a minute, 250,000 tokens a minute, 20 a day (33 requests were counted in one day, so it does answer sometimes) | never completed in the probe | strong, last resort |
 | `gemini-3.7-flash` | v1: 503. v1beta: 429, 20 requests a day used up | n/a | n/a | n/a | 20 a day | n/a | not used |
 | `gemini-4-argon` | no: free-tier request limit 0 | n/a | n/a | n/a | 0 | n/a | not used |
 | `gemini-3.1-pro-preview` | no: 404 on v1; free-tier limit 0 on v1beta | n/a | n/a | n/a | 0 | n/a | not used |
 | `gemini-3-flash-preview` | only on v1beta (404 on v1): 2.0 s | n/a | n/a | n/a | n/a | not tested | not used (the server uses v1) |
 | `gemini-2.5-flash`, `-flash-lite`, `-pro` | no: 404 "no longer available to new users" | n/a | n/a | n/a | n/a | n/a | not used |
-| `gemma-4-26b-a4b-it` | tiny prompts only: 16,000 input tokens a minute, no `thinking_level` | 4.8 s / blocked | n/a | n/a | 16,000 tokens a minute | n/a | not used (the prompt is 52,500 tokens) |
+| `gemma-4-26b-a4b-it` | tiny prompts only: 16,000 input tokens a minute, no `thinking_level` | 4.8 s / blocked | n/a | n/a | 30 requests a minute, 16,000 tokens a minute, 14,400 a day | n/a | not used (the prompt is 52,500 tokens) |
 | `gemma-4-31b-it` | 500 INTERNAL | n/a | n/a | n/a | n/a | n/a | not used |
+
+Exact limits are from the AI Studio rate-limit page of the project (free tier, "Rate limits by model"; the day resets at midnight Pacific time), which also shows the peak use over 28 days. The page can be read only in a signed-in browser; there is no Gemini API for it (Cloud Monitoring and Cloud Quotas could give the same figures with Google Cloud credentials, untested).
 
 Not tested: image, audio, live, embedding, robotics, music, video and agent models (not text generation), and the models the documentation marks as shut down.
 Explicit caching is refused for every model (`TotalCachedContentStorageTokensPerModelFreeTier`, limit 0), whatever the pricing page says; implicit caching works on
