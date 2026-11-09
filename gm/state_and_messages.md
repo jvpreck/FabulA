@@ -414,6 +414,7 @@ One record per game and turn, with the actions requested by **all** characters. 
 - Free text is always accepted. You parse it into `parsed` and store both.
 - `status` of an action: `queued` (waits for the turn), `resolved_now` (resolved immediately as an autonomous action, §5.3 of the protocol), `resolved` (resolved by the turn), `superseded` (replaced by a later action).
 - `handling`: `queued` or `autonomous`.
+- `needs_parse`: `true` on an action the server saved while you could not be reached (Gemini down or over its quota). It has `raw_text` and `parsed: null`. Parse it at the turn close (protocol §5, step 2). You never set this field.
 - `parsed.blocks` has at most as many entries as the turn span allows, minus the Blocks already in the character's `turn_state.blocks_used`. Each costs a Block.
 - `share`: `{ "to": "<character or npc id>", "text": "…" }`. `messages`: `channel` is `in_person`, `telephone`, `telegram` or `letter`.
 - The server creates the record when the turn opens, stores each action you parse, and marks queued actions `resolved` when the turn resolves. You never write this record. For an `action` request, return the parse in the response field `action` (§6.2).
