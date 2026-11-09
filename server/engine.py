@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from . import apply as ap
-from . import config, files, prompt, redact, tasks
+from . import config, files, level2, prompt, redact, tasks
 from .db import Conflict, Workspace, state_key
 from .dice import make_dice
 from .gm import GMBusy, GMError, GMUnavailable, parse
@@ -1798,6 +1798,9 @@ class Engine:
             return self._say(ws, game, player_id, c, text, payload)
         if kind == "action" and game["phase"] != "active":
             raise EngineError("the game has not started yet")
+        topic = str(payload.get("topic") or "").strip().lower()
+        if kind == "free_query" and c is not None and topic in level2.TOPICS:
+            return self._answer_level2(ws, game, player_id, c, topic)
         request = {"player_id": player_id, "character_id": cid, "kind": kind, "text": text, "payload": payload}
         phase_before = game["phase"]
         post = self._post_intake(kind, text, cid)
@@ -1821,6 +1824,20 @@ class Engine:
                 extra["handling"] = "resolved_turn"
         ws = self._ws()
         return self._finish(ws, player_id, game_id, extra)
+
+    # ---- TLR-01-009, level 2: a free query with a known `topic` is answered from the database. No AI Master call, no quota.
+    def _answer_level2(self, ws, game, player_id, c, topic):
+        data = level2.answer(topic, game, c, ws.load_game_characters(game["id"]), self.now(), self._span_blocks(game))
+        usage = getattr(self.gm, "usage", None)
+        if usage is not None:
+            try:
+                usage.record({"level": 2, "tier": "database", "mode": "intake", "kind": topic, "game_id": game["id"], "outcome": "ok"})
+            except Exception:
+                pass
+        return self._finish(ws, player_id, game["id"], {
+            "handling": "answered", "level": 2, "topic": topic, "answer": data,
+            "note": "Answered by the server from the game's data; the AI Master was not asked. Tell the player in their language. "
+                    "Add nothing that is not here; for anything else send a free_query without a topic."})
 
     # ---- TLR-03-009 / 07-009 / 07-004: when the AI Master cannot answer (Gemini down, or over its quota), an `action` is not refused: it is saved
     # as a level 4 action, unparsed, and the AI Master reads the player's own words at the turn close.

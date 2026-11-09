@@ -71,6 +71,8 @@ Answer these yourself from the artifacts and the last sync block. Do not use the
 
 If you cannot answer, or the player wants something the facts cannot show, call `submit_action` with `kind: "free_query"`. Never guess.
 
+**Asking the server for data (level 2).** When the question is about data the server holds, add `payload: { "topic": "<topic>" }` to the free query. The server answers at once from its database, without the AI Master (`handling: "answered"`, `level: 2`, the data in `answer`). Topics: `time` (time left in the turn, day, Block, Blocks left), `inventory`, `sheet`, `conditions`, `location` (and who else is there), `relationships`, `threads`, `knowledge`, `messages`, `others` (public status of the other characters), `settings` (standing orders, safety). Use it whenever your artifacts may be stale; it costs nothing. Without a topic, or for a question about the world, the AI Master answers.
+
 ## 5. What must go to the server
 
 Anything that changes the game or reveals new information: an action, a search, a conversation with an NPC, using an item, moving, resting, sending a message, speaking to another character, a decision, new standing orders. Use `submit_action`.
