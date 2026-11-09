@@ -152,6 +152,7 @@ Roll one from each column and interpret in context.
 ---
 
 ## 5. Setting and places
+<!-- for: turn, setup -->
 
 **Setting archetype (d12)**
 
@@ -670,6 +671,7 @@ For the ladder of antagonist responses see the ruleset, if it has one.
 ---
 
 ## 10. Challenges, Consequences, Twists
+<!-- for: turn -->
 
 **Challenge (d20)**
 
@@ -737,6 +739,7 @@ For the ladder of antagonist responses see the ruleset, if it has one.
 ---
 
 ## 11. Collective belief kit
+<!-- for: turn -->
 
 Use for cults, panics, shared delusions and communities that harden around a belief. Everything is human and rational: suggestion, charisma, fear, a hazard, a ritual that binds.
 
@@ -818,6 +821,7 @@ Use for cults, panics, shared delusions and communities that harden around a bel
 ---
 
 ## 12. Fear seeds and distortions
+<!-- for: turn -->
 
 ### 12.1 Fear seeds (d20)
 Use with the fears the players named. When a distortion needs content, choose a seed and give it a concrete detail from the scene.
@@ -851,6 +855,7 @@ Distortion tables belong to the ruleset that uses a distortion module. If the ru
 ---
 
 ## 13. Unwanted attention, rumors, opportunities
+<!-- for: turn -->
 
 **Unwanted attention (d10, human only)**
 

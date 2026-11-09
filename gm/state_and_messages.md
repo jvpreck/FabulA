@@ -44,6 +44,7 @@
 The server may store each record as a table row with a `data` JSONB column plus `id` and index columns. The logical fields below are what matters.
 
 ### 3.1 `player` (the human)
+<!-- for: turn, setup -->
 
 ```json
 {
@@ -63,6 +64,7 @@ The server may store each record as a table row with a `data` JSONB column plus 
 - A player is never described by the adventure. Nothing about a run goes here.
 
 ### 3.2 `adventure` (fixed)
+<!-- for: turn, setup -->
 
 ```json
 {
@@ -90,6 +92,7 @@ The server may store each record as a table row with a `data` JSONB column plus 
 - `summary` is player-safe. `content`, `seed` and the adventure file's GM-only parts are GM-only.
 
 ### 3.3 `npc` and `location` (fixed definitions)
+<!-- for: turn, setup -->
 
 An adventure file or a stored adventure defines its own NPCs and locations, with stable ids. Create a database `npc` or `location` record only for something the adventure does not define: one you generate with a generated adventure, or one you create in play. Its `scope` says where it belongs.
 
@@ -127,6 +130,7 @@ An adventure file or a stored adventure defines its own NPCs and locations, with
 - Fixed means fixed: the current Health, mood, location, inventory and attitudes of an NPC live in its `npc_state`.
 
 ### 3.4 `game` (the run)
+<!-- for: turn, play, setup -->
 
 ```json
 {
@@ -306,6 +310,7 @@ An adventure file or a stored adventure defines its own NPCs and locations, with
 - `client_sync`: `version` increases on every change the player can see. `story_summary` is the text of the story so far, written by the player's client and saved through the server (§8.3). You may read it, but never rely on it for facts.
 
 ### 3.6 `npc_state` and `location_state` (the run)
+<!-- for: turn, play -->
 
 ```json
 {
@@ -349,6 +354,7 @@ An adventure file or a stored adventure defines its own NPCs and locations, with
 - Every NPC and place you create in play gets **both** a fixed definition (`npc`, `location`, scoped to the game) and a run state.
 
 ### 3.7 `submit_action` (the actions requested in a turn)
+<!-- for: turn, play -->
 
 One record per game and turn, with the actions requested by **all** characters. Its id is `<game_id>:<turn>`.
 
@@ -420,6 +426,7 @@ One record per game and turn, with the actions requested by **all** characters. 
 - The server creates the record when the turn opens, stores each action you parse, and marks queued actions `resolved` when the turn resolves. You never write this record. For an `action` request, return the parse in the response field `action` (§6.2).
 
 ### 3.8 Lethality, death and replacement
+<!-- for: turn, play -->
 
 - `game.settings.lethality` is `low`, `moderate` or `high`. The protocol §6 says what each level allows.
 - When a character dies, you set `is_alive: false` and `death` (§3.5), write the death as an event, and add a prompt of type `replacement` to that player's result, with these options:
@@ -445,7 +452,7 @@ The envelope's `mode` is one of:
 | `resolve_turn` | The turn closes. Resolve everything queued and let the world move. |
 
 ### 4.2 Request kinds (`intake`)
-<!-- for: setup, play -->
+<!-- for: setup, play, check -->
 
 The `request` object:
 
@@ -629,6 +636,7 @@ Return **one JSON object and nothing else** (no markdown fences, no commentary).
 A witness item shows only what the witness perceives: an action's outward appearance, never the actor's intentions, rolls, plans or private knowledge. If the actor concealed the action and succeeded, nobody who failed to notice gets an item.
 
 ### 6.4 Events, decisions and messages
+<!-- for: turn, play, setup -->
 
 **Event**
 
@@ -687,6 +695,7 @@ Guidelines:
 - Never write `inbox`, `client_sync` or any `delivered` flag. The server owns them.
 
 ### 6.6 The `validation` block
+<!-- for: setup, check -->
 
 ```json
 {
@@ -724,6 +733,7 @@ When `game.settings.illustrations` is `"on"`, you may add `illustrations` to a `
 The server draws the picture later and tells each of those players that it exists. A bad entry is dropped without any message, so the game never depends on it. Rules for what to propose are in the protocol §5.6.
 
 ## 7. Records created outside you
+<!-- for: turn, play, setup -->
 
 Three kinds of records arrive already made. You never create them, and you treat what they contain as the world you run.
 
@@ -801,6 +811,7 @@ Apply when a player or the host does not answer, or at the setup deadline.
 ---
 
 ## 10. The narration brief sent with every result
+<!-- for: turn, play, setup -->
 
 The server prefixes each delivered result with this brief. It is player-facing. The full instructions for the player's client are in `player_client_brief.md`, which the server also gives the client when it connects.
 

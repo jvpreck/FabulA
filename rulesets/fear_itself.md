@@ -70,7 +70,7 @@ summary: Horror about ordinary people. Grounded and realistic by default; an adv
 - **Means [House]:** state money, transport and contacts narratively. Anything else is produced with a Preparedness test.
 
 ### 2.1 Character intake and validation [House]
-<!-- for: setup -->
+<!-- for: setup, check -->
 
 A character reaches the game by one of three routes: **generated** with the AI Master (quick creation above), **pregenerated** (§2.2), or **provided** by the player in any format. Whatever the route, produce the canonical character record (state contract §3.5) and run this checklist. Report every line in the `validation` block.
 
@@ -98,12 +98,14 @@ A character reaches the game by one of three routes: **generated** with the AI M
 **Carrying a character between adventures.** Imported ratings must pass the checklist. Pools start full. Items and relationships from earlier adventures are accepted only if the player lists them and they fit the means and the era.
 
 ### 2.1a Restricted character types, stereotypes and options [House]
+<!-- for: setup, check -->
 
 - **Restricted types.** The adventure may allow one of each, or ban any of them. A **combat or investigation expert** (cop, veteran, private investigator) must be weak somehow: a cadet, a retiree, a washout. A **psychic** (supernatural module only) is fragile, isolated or newly manifesting. An **occult expert** is untrustworthy, weak or compromised, and often the mentor who dies. Slasher-style adventures may ban psychics and occultists.
 - **Stereotypes (one-shots, optional).** A stereotype starts from a fixed base of 8 Investigative and 40 General build points, and the player adds the rest of the normal budget. Archetypes: **Good Girl**, **Sexy Girl**, **Jock or Stud**, **Brain**, **Authority Figure**, **Burnout**, **Good Guy**, **Preacher Man**. Subvert the stereotype by gender, sexuality or behavior, and never impose a role on a player.
 - **Pregenerated characters for one-shots** have a short backstory (one page at most), a one-line concept, a reason to be involved, a spread of abilities and backstory clues.
 
 ### 2.2 Pregenerated and on-demand characters [House]
+<!-- for: setup, check -->
 
 - The adventure may supply pregenerated characters (its player-safe character sheets). Players may swap their Source of Stability or small details but not break the budgets.
 - A pregenerated character built for another party size is **rescaled** by trimming Investigative points only, to the budget for the party size at the start. Trim the highest ratings first, keep every ability the character needs at 1 or more when possible, and tell the player exactly what changed. If the adventure gives a trim table, it wins.
@@ -111,6 +113,7 @@ A character reaches the game by one of three routes: **generated** with the AI M
 - A pregenerated character claimed by one player cannot be claimed by another.
 
 ### 2.3 Late joiners, losses and replacements [House]
+<!-- for: turn, play, setup -->
 
 - **Late joiners** use the budgets for the party size at the start. Give them an in-world way into the story, designed by the AI Master (a friend of a character, an ally's request, a colleague posted to the case). They begin when the next turn opens.
 - **A dead character** (§4.10) is replaced in the same game by a new character the player chooses: a newly generated one, an unclaimed pregenerated one, or an NPC the AI Master has marked available (§9). A **Gone** or **committed** character is alive but out of play and can be replaced the same way. Generated and pregenerated replacements use the same budgets as everyone (party size at the start). The replacement arrives in the fiction within one or two turns and does not inherit the other's knowledge, items or relationships.
@@ -146,6 +149,7 @@ Typical spend benefits: extra information; skipping a scene or compressing an er
 ---
 
 ## 4. Core mechanics
+<!-- for: turn, play -->
 
 ### 4.1 Clues
 - **essential clue:** always found; leads onward. **0-point clue:** free atmosphere. **Spend clue:** a benefit for 1+ points. **Inconspicuous clue:** needs the right ability; point it out. **Simple Search:** anyone finds obvious clues. **Floating clue:** not tied to a scene; the GM releases it to unstick play.
@@ -251,6 +255,7 @@ Absent, paused and away characters are never taken to the bottom at any level (�
 ---
 
 ## 5. House modules (the adventure switches them on)
+<!-- for: turn, play -->
 
 ### 5.1 Perception Drift [House]
 Use when characters are exposed to something that loosens their grip on reality: a toxin, sleep deprivation, isolation, fever, grief, a coercive group, sustained suggestion. The adventure defines the **sources of exposure, zones, rates and recovery**; this module defines what happens next. Track one **Drift level per character** privately.
@@ -343,6 +348,7 @@ Devout and Frenzied NPCs are sincere, not cackling villains. A crowd acts as one
 ---
 
 ## 6. Solo and party play (asynchronous)
+<!-- for: turn, play, setup -->
 
 ### 6.1 Solo [House]
 1. **One viewpoint.** Every thread is narrated through the character. No cutaways.
@@ -366,6 +372,7 @@ Devout and Frenzied NPCs are sincere, not cackling villains. A crowd acts as one
 7. **Group size.** Budgets come from the party size at the start (§2).
 
 ### 6.3 Resolving conflicting actions [House]
+<!-- for: turn -->
 
 One world, one truth. Order first, dice second. Nobody's action is dropped.
 
@@ -387,6 +394,7 @@ One world, one truth. Order first, dice second. Nobody's action is dropped.
 12. **NPCs and the antagonist** act after the characters in each Block unless their schedule says otherwise.
 
 ### 6.4 Standing orders, absent and paused players [House]
+<!-- for: turn, play -->
 
 - **Standing orders** are stored in each character's record (`settings.standing_orders`) and can be changed at any time. Fields: `hold` (a short text: where to stay and what to do when the player is absent), `risk_tolerance` (`low`, `medium`, `high`), `perception_check` (`auto` or `believe`, with an optional `anchor` and `spend`), `default_spends` (for example Sense Trouble 1 each Block), `never_do` (a list of things the character will not do), and `reply_to_messages` (true or false). The default is: stay safe, rest, take no risks, `perception_check: auto`.
 - **A missed turn.** Apply the standing orders. If there are none, the character **holds**: stays where they are or returns to their lodging, rests (a Haven is possible), keeps to routine, declines risky invitations, and takes no irreversible or dangerous action. A task the player marked `continue until told` (for example a long archive search) continues.
@@ -418,6 +426,7 @@ Every adventure declares its **era, place and tone**. Use this checklist and let
 ---
 
 ## 8. Running the mystery: craft notes
+<!-- for: turn, setup -->
 
 - **Spine and clues:** every scene has at least one essential clue and a clear way onward. Give each essential conclusion at least three routes (three-clue rule).
 - **Close red herrings** with satisfying proof, not dead ends.
@@ -443,6 +452,7 @@ Every adventure declares its **era, place and tone**. Use this checklist and let
 ---
 
 ## 9. NPC statistics [House]
+<!-- for: turn, play -->
 
 NPCs have no full sheets. Record only what play needs.
 
@@ -519,6 +529,7 @@ Psychic powers work as **Investigative abilities**: a 0-point clue is free, and 
 ---
 
 ## 11. Formats, campaigns and advancement [House]
+<!-- for: setup -->
 
 - **One-shot.** One story, a claustrophobic premise (a remote base, a hospital, a haunted house), a high body count, pregenerated characters or stereotypes (§2.1a) and one Source of Stability (a person). See §8 for pacing.
 - **Miniseries.** A fixed number of turns or stories (three to eight). Prepare a pitch: title, logline, setting, suggested and forbidden character types, tone. Build a list of **revelations** spread across the episodes, leave blanks for the players' own elements, use questionnaire answers to build the setting, keep floating clues and a forced move so the climax happens, and let the finale be in the players' hands. Each character gets a spotlight episode that complicates early and converges late. Supporting characters carry three traits (a habit, a descriptive hook, a tic or speech trait), layered public, discoverable and secret information, and a personal goal.
@@ -529,6 +540,7 @@ Psychic powers work as **Investigative abilities**: a 0-point clue is free, and 
 ---
 
 ## Appendix A. Slip tables (perception module)
+<!-- for: turn, play -->
 
 The Slip tables below belong to the Perception Drift module (§5.1). Use them when the module calls for a Slip. Choose the table by Drift level. Replace {Anchor} with a person or place the character relies on, and {Belief} with the shared belief or figure of the adventure. Every Slip needs a **tell**. Never label it a hallucination in narration. For ideas beyond these tables, combine a fear seed from the oracles with a concrete detail of the scene.
 
@@ -609,6 +621,7 @@ The state contract fixes the outer shape of a character. This ruleset fills thre
 ---
 
 ## Appendix C. Example creatures (supernatural module only)
+<!-- for: turn, play -->
 
 Stat lines for use or as models. **Ab** Aberrance, **Ath** Athletics, **H** Health, **Sc** Scuffling, **Sh** Shooting, **HT** Hit Threshold, **Arm** Armor, **Awr/Stl** Awareness and Stealth modifiers, **Dmg** damage modifier. An adventure's own stats win. Each entry is a concept in one line; the adventure supplies the story.
 

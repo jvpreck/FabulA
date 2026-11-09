@@ -382,7 +382,10 @@ class Engine:
             return None
         if mode == "resolve_turn":
             return "turn"
-        return "setup" if (request or {}).get("kind") in cls.SETUP_KINDS else "play"
+        kind = (request or {}).get("kind")
+        if kind == "character_submission":  # TLR-03-017: checking a sheet needs the ruleset's character rules, not the whole game
+            return "check"
+        return "setup" if kind in cls.SETUP_KINDS else "play"
 
     def _log_call(self, game_id, level, tier, mode, request, outcome, attempt):
         """TLR-08-006: one line in the day's statistics for every AI Master call. It never blocks or fails a request."""
