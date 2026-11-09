@@ -12,6 +12,9 @@ Optional values the contract lets be null say so with a type list (`["string", "
 `tests/test_priority1.py` walks this schema and fails if any object lacks both `properties` and `additionalProperties`.
 `check()` is a small validator for this subset, used by the scenario checks (tests/test_scenarios.py), so no extra package is needed."""
 
+import copy
+import json
+
 FREE = {"type": "object", "additionalProperties": True}  # an object whose content the contract does not fix
 ANY = {}  # any JSON value
 STR = {"type": "string"}
@@ -160,3 +163,36 @@ def bare_objects(schema=RESPONSE_SCHEMA, path="$"):
     if isinstance(schema.get("items"), dict):
         out += bare_objects(schema["items"], f"{path}[]")
     return out
+
+
+# What a request must come back with. The general schema has to let `validation` and `action` be null (most requests have neither), and a
+# model that is allowed to leave a field out leaves it out (live, 2026-11-09: a character check came back with validation null although
+# the structure was valid). So the schema sent for a request names what that request requires.
+VERDICT = obj({
+    "character_id": STR,
+    "result": {"type": "string", "enum": ["pass", "pass_with_adjustments", "fail"]},
+    "party_size_used": NINT,
+    "checks": {"type": "array", "items": obj({"n": INT, "name": STR, "result": STR, "note": NSTR}, ["name", "result"])},
+    "adjustments": {"type": "array", "items": FREE},
+}, ["result", "checks"])
+
+
+def for_request(mode, request):
+    """The response schema for one request: the general one, plus what the request requires."""
+    s = copy.deepcopy(RESPONSE_SCHEMA)
+    kind = (request or {}).get("kind")
+    if mode == "intake" and kind == "character_submission":
+        s["properties"]["validation"] = copy.deepcopy(VERDICT)  # a verdict, not null
+        s["required"] = s["required"] + ["validation", "results"]
+    elif mode == "resolve_turn":
+        s["required"] = s["required"] + ["results"]
+    return s
+
+
+def for_envelope(user_json):
+    """`for_request` for a request given as the JSON text of the envelope (what the AI Master is sent). The general schema if it cannot be read."""
+    try:
+        env = json.loads(user_json)
+        return for_request(env.get("mode"), env.get("request"))
+    except Exception:
+        return RESPONSE_SCHEMA

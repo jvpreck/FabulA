@@ -69,3 +69,45 @@ def test_a_verdict_without_a_character_id_is_still_applied_to_the_draft():
     eng, gm, seen = world([{"result": "pass", "checks": []}])
     gid, out = submit(eng)
     assert out.get("accepted") is True and len(seen) == 1
+
+
+# ---- a queued or autonomous action must carry its parse
+def test_a_queued_action_without_its_parse_is_sent_back_and_stored_only_with_it():
+    from test_engine import start_solo
+    seen = []
+
+    def rule(env, n):
+        r = standard_gm(env, n)
+        req = env.get("request") or {}
+        if req.get("kind") == "action" and req.get("text", "").startswith("ask"):
+            seen.append(env.get("previous_errors"))
+            if len(seen) == 1:
+                r["action"] = {"parsed": {}}  # the hollow answer
+        return r
+
+    CHECK["fail_next"] = 0
+    eng = Engine(MemoryStore(), ScriptedGM(rule), now_fn=lambda: datetime(2026, 11, 1, 9, tzinfo=timezone.utc))
+    gid, cid = start_solo(eng)
+    eng.submit_action("p_jorge", gid, "action", "ask the miller", cid)
+    assert len(seen) == 2 and "action.parsed" in " ".join(seen[1])
+    sa = eng.store.get("submit_action", f"{gid}:1")[0]
+    stored = sa["actions"][cid][-1]
+    assert stored["parsed"] and stored["parsed"].get("blocks")
+
+
+def test_a_queued_action_that_never_comes_back_with_its_parse_is_refused():
+    from test_engine import start_solo
+
+    def rule(env, n):
+        r = standard_gm(env, n)
+        if (env.get("request") or {}).get("kind") == "action" and env["request"]["text"].startswith("ask"):
+            r["action"] = {}
+        return r
+
+    CHECK["fail_next"] = 0
+    eng = Engine(MemoryStore(), ScriptedGM(rule), now_fn=lambda: datetime(2026, 11, 1, 9, tzinfo=timezone.utc))
+    gid, cid = start_solo(eng)
+    with pytest.raises(EngineError):
+        eng.submit_action("p_jorge", gid, "action", "ask the miller", cid)
+    sa = eng.store.get("submit_action", f"{gid}:1")[0]
+    assert not [a for a in sa["actions"][cid] if a["raw_text"].startswith("ask")], "nothing was stored"

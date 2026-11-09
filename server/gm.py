@@ -192,7 +192,7 @@ class GeminiGM:
             else:
                 cfg["system_instruction"] = system
             if structured:  # TLR-03-015: the provider enforces the response's shape
-                cfg["response_json_schema"] = schema.RESPONSE_SCHEMA
+                cfg["response_json_schema"] = schema.for_envelope(user)
             client = self._get_beta() if use_cache else self._get()
             return client.models.generate_content(model=model, contents=user, config=types.GenerateContentConfig(**cfg))
 

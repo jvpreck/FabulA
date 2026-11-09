@@ -1788,6 +1788,11 @@ class Engine:
             if sa is None:
                 raise ap.ApplyError("no open turn to store the action in")
             a = resp.get("action") or {}
+            parsed = a.get("parsed")
+            if not isinstance(parsed, dict) or not any(v for v in parsed.values()):
+                raise ap.ApplyError(  # stored empty it would be resolved as nothing at the turn
+                    "an `action` request handled as queued or autonomous must return `action.parsed` (state contract 3.7: blocks, share, messages, "
+                    "tasks and so on) with what the player asked for. Yours had none.")
             rec = {"id": short("a"), "player_id": by_id[cid]["player_id"], "submitted_at": iso(self.now()), "kind": "action",
                    "raw_text": text, "parsed": a.get("parsed"), "handling": handling,
                    "status": "resolved_now" if handling == "autonomous" else "queued",

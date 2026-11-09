@@ -310,3 +310,23 @@ def test_the_contract_check_catches_a_hollow_answer():
     good = {"handling": "autonomous", "action": {"parsed": {"blocks": [{"block": "Morning"}]}},
             "state_changes": [{"op": "append", "entity": "character", "id": "c", "path": "turn_state.blocks_used", "doc": "Morning"}]}
     assert contract_problems(good, {"kind": "action"}) == []
+
+
+def test_a_character_check_must_return_a_verdict_in_the_schema_sent_for_it():
+    s = schema.for_request("intake", {"kind": "character_submission"})
+    assert "validation" in s["required"] and schema.bare_objects(s) == []
+    ok = {"status": "ok", "results": {}, "validation": {"result": "fail", "checks": [{"name": "Budget", "result": "fail", "note": "24 of 22"}]}}
+    assert schema.check(ok, s) == []
+    assert schema.check({"status": "ok", "results": {}, "validation": None}, s), "null is not a verdict"
+    assert schema.check({"status": "ok", "results": {}}, s), "and neither is nothing"
+    assert schema.check({"status": "ok", "results": {}, "validation": {}}, s), "nor an empty block"
+    assert schema.check({"status": "ok", "validation": None}) == [], "other requests may leave it null"
+    assert "validation" not in schema.for_request("intake", {"kind": "action"})["required"]
+    assert "results" in schema.for_request("resolve_turn", None)["required"]
+
+
+def test_the_schema_is_chosen_from_the_envelope_text():
+    import json as _j
+    env = _j.dumps({"mode": "intake", "request": {"kind": "character_submission"}})
+    assert "validation" in schema.for_envelope(env)["required"]
+    assert schema.for_envelope("not json") is schema.RESPONSE_SCHEMA
