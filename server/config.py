@@ -111,3 +111,9 @@ ENVELOPE_WORLD_NARROW_CHARS = int(os.environ.get("ENVELOPE_WORLD_NARROW_CHARS", 
 # is made by the light model unless CHARACTER_CHECK_TIER=turn, and a strong model that has just failed is skipped for a while.
 CHARACTER_CHECK_TIER = "turn" if os.environ.get("CHARACTER_CHECK_TIER", "light").lower() == "turn" else "light"
 STRONG_BREAKER_SECONDS = int(os.environ.get("STRONG_BREAKER_SECONDS", "900"))  # 0 never skips the strong model
+
+# The light model's second chance (see GeminiGM._answer_light). Empty GEMINI_MODEL_LIGHT_FALLBACK turns it off.
+GEMINI_MODEL_LIGHT_FALLBACK = os.environ.get("GEMINI_MODEL_LIGHT_FALLBACK", "gemini-3.5-flash")
+LIGHT_QUICK_RETRIES = int(os.environ.get("LIGHT_QUICK_RETRIES", "1"))  # retries of the first model when a second one is behind it
+LIGHT_QUICK_BUDGET_SECONDS = float(os.environ.get("LIGHT_QUICK_BUDGET_SECONDS", "8"))  # most time it spends waiting between those attempts
+LIGHT_BREAKER_SECONDS = int(os.environ.get("LIGHT_BREAKER_SECONDS", "120"))  # how long a failed model of the pair is left alone (0 = not at all)

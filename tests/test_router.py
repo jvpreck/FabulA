@@ -10,6 +10,12 @@ from server.gm import GeminiGM, GMBusy, GMUnavailable, Usage
 from test_engine import ScriptedGM, standard_gm, start_solo, CHECK
 
 
+@pytest.fixture(autouse=True)
+def no_light_fallback(monkeypatch):
+    """These tests are about one model at a time; the light model's second chance has its own tests (test_light_fallback.py)."""
+    monkeypatch.setattr(config, "GEMINI_MODEL_LIGHT_FALLBACK", "")
+
+
 class Clock:
     def __init__(self):
         self.t = datetime(2026, 11, 1, 9, tzinfo=timezone.utc)

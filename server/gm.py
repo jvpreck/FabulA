@@ -70,7 +70,7 @@ class Usage:
             waited += 2
 
     # ---- call statistics (TLR-08-006): what every AI Master call cost, by level, tier, request type and game
-    STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries", "cache_hit", "cache_created", "cache_off", "cache_stale", "breaker_open", "breaker_tripped",
+    STAT_FIELDS = ("calls", "ok", "invalid_json", "rejected", "needs_dice", "failed", "retries", "cache_hit", "cache_created", "cache_off", "cache_stale", "breaker_open", "breaker_tripped", "fallback_used",
                    "tokens_in", "tokens_cached", "tokens_out", "tokens_thought", "latency_ms")
 
     def record(self, entry):
@@ -92,6 +92,8 @@ class Usage:
                 if outcome in bucket:
                     bucket[outcome] += 1
                 bucket["retries"] += int(entry.get("retries") or 0)
+                if entry.get("fallback") == "used":
+                    bucket["fallback_used"] += 1
                 if entry.get("breaker") in ("open", "tripped"):
                     bucket["breaker_" + entry["breaker"]] += 1
                 cache = (entry.get("cache") or "").split(":")[0]
@@ -318,8 +320,10 @@ class GeminiGM:
             return False
         return bool(re.search(r"\b(500|502|503|504)\b", m)) or any(x in m for x in ("unavailable", "overloaded", "high demand", "internal error"))
 
-    def _generate_retrying(self, model, level, system, user):
+    def _generate_retrying(self, model, level, system, user, retries=None, budget=None):
         """One model call, retried with exponential backoff and jitter on transient errors, within a total waiting budget."""
+        retries = config.GEMINI_RETRIES if retries is None else retries
+        budget = config.GEMINI_RETRY_BUDGET_SECONDS if budget is None else budget
         import random
         import time
         waited = 0.0
@@ -330,12 +334,12 @@ class GeminiGM:
                 return self._generate(model, level, system, user)
             except Exception as e:
                 took = time.monotonic() - started
-                if attempt >= config.GEMINI_RETRIES or not self._transient(e):
+                if attempt >= retries or not self._transient(e):
                     raise
                 if took > config.GEMINI_RETRY_MAX_CALL_SECONDS:  # a 504 that came back after ~100 s is a timeout: retrying costs another 100 s
                     raise
                 delay = config.GEMINI_RETRY_BASE_SECONDS * (3 ** attempt) * (1 + random.random() * 0.25)
-                if waited + took + delay > config.GEMINI_RETRY_BUDGET_SECONDS:  # the budget is total time, calls included
+                if waited + took + delay > budget:  # the budget is total time, calls included
                     raise
                 self._sleep(delay)
                 waited += took + delay
@@ -371,15 +375,16 @@ class GeminiGM:
             b = self._breakers[model] = {"until": (note or {}).get("until", 0), "reason": (note or {}).get("reason", ""), "checked": now}
         return b if b["until"] > now else None
 
-    def _trip_breaker(self, model, e):
+    def _trip_breaker(self, model, e, seconds=None):
         import time
-        if config.STRONG_BREAKER_SECONDS <= 0:
+        seconds = config.STRONG_BREAKER_SECONDS if seconds is None else seconds
+        if seconds <= 0:
             return
         now = time.time()
         reason = f"{type(e).__name__} {e}"[:120]
-        self._breakers[model] = {"until": now + config.STRONG_BREAKER_SECONDS, "reason": reason, "checked": now}
+        self._breakers[model] = {"until": now + seconds, "reason": reason, "checked": now}
         self._meta["breaker"] = "tripped"
-        self._write_breaker(model, now + config.STRONG_BREAKER_SECONDS, reason)
+        self._write_breaker(model, now + seconds, reason)
 
     def _close_breaker(self, model):
         """The strong model answered: forget an earlier failure."""
@@ -428,14 +433,39 @@ class GeminiGM:
         if r != "ok":
             raise GMBusy("the AI Master is busy right now (request quota). Please try again in a few minutes"
                          if r == "minute" else "the AI Master has reached its daily request quota. Please try again tomorrow")
-        try:
-            out = self._generate_retrying(config.GEMINI_MODEL_LIGHT, config.GEMINI_THINKING_LEVEL, system, user)
-        except Exception as e:
-            if self._retryable(e):  # overloaded, unavailable, quota or timeout: Gemini is not answering
-                raise GMUnavailable(type(e).__name__ + ": " + str(e)[:200]) from e
-            raise
-        self.last = {"tier": "light", "model": config.GEMINI_MODEL_LIGHT, "degraded": degraded}
-        return out
+        return self._answer_light(system, user, degraded)
+
+    # ---- the light model's second chance. A 503 "high demand" from the light model failed a player's step on 2026-11-09 (three in a row, then
+    # the server gave up). The free tier's limits are per model, so a second model also answers when the first is over its per-minute tokens.
+    # The first model gets one quick retry, then GEMINI_MODEL_LIGHT_FALLBACK is tried; after a failure the failed model is left alone for
+    # LIGHT_BREAKER_SECONDS (shared by every instance) so the next requests go straight to the one that works.
+    def _answer_light(self, system, user, degraded):
+        primary, second = config.GEMINI_MODEL_LIGHT, config.GEMINI_MODEL_LIGHT_FALLBACK
+        chain = [primary]
+        if second and second != primary:
+            chain = [second, primary] if self._breaker(primary) and not self._breaker(second) else [primary, second]
+        last_error = None
+        for i, model in enumerate(chain):
+            quick = i < len(chain) - 1  # a model that has another behind it gives up fast
+            try:
+                out = self._generate_retrying(model, config.GEMINI_THINKING_LEVEL, system, user,
+                                              retries=config.LIGHT_QUICK_RETRIES if quick else None,
+                                              budget=config.LIGHT_QUICK_BUDGET_SECONDS if quick else None)
+            except Exception as e:
+                if not self._retryable(e):
+                    raise
+                last_error = e
+                if len(chain) > 1:
+                    self._trip_breaker(model, e, seconds=config.LIGHT_BREAKER_SECONDS)
+                continue
+            if len(chain) > 1:
+                self._close_breaker(model)
+            if model != primary:
+                self._meta["fallback"] = "used"
+                degraded = (degraded + "; " if degraded else "") + f"light model unavailable, answered by {model}"
+            self.last = {"tier": "light", "model": model, "degraded": degraded}
+            return out
+        raise GMUnavailable(type(last_error).__name__ + ": " + str(last_error)[:200]) from last_error
 
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.I)
