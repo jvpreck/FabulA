@@ -21,6 +21,7 @@ PLAYER_KINDS = {"setup_answers", "character_submission", "character_confirm", "a
                 "thread_note", "message", "decision", "free_query", "pause", "resume", "say"}
 NEEDS_CHARACTER = {"action", "standing_orders", "thread_note", "message", "character_confirm", "say", "pause", "resume"}
 HANDLINGS = {"answered", "queued", "autonomous", "clarify", "rejected", "resolved_turn"}
+NARRATION_LEVELS = ("low", "medium", "high")  # TLR-07-010: how much the client narrates; a setting of each player in each game
 
 NARRATION_BRIEF = (
     "You are the narrator for one player in a Role-Playing-Game (RPG) asynchronous game. The facts below are ground truth. "
@@ -32,8 +33,16 @@ NARRATION_BRIEF = (
     "FORMAT: write every paragraph of narration as a blockquote in bold, "
     "like this: > **text of the paragraph**. Rolls, the notebook entry, offers and the "
     "next prompt stay outside the blockquote in plain text. "
-    "OPENING: when narration_hints.opening is true this is the first narration of the game. Make it long and rich (about 600 to 1000 words, "
-    "several paragraphs): first the setting (place, year, the season and hour, a short historical or social background that bears on "
+    "VERBOSITY (TLR-07-010): the delivery's narration_verbosity (also in sync.narration.verbosity) is the player's own choice, so narrate to it. "
+    "low: brisk, about 80 to 150 words per scene, only the facts and the one detail that matters, no side description. "
+    "medium (the default): about 150 to 350 words per scene. "
+    "high: rich, about 350 to 600 words per scene, with sensory detail and atmosphere that fit the facts. Never add facts at any level. "
+    "WORLD AND MECHANICS (TLR-07-011): everything about the game world is narrated in the voice of the story, as bold blockquote paragraphs, never handed over as a list or a table: "
+    "what the character sees, remembers, carries, knows about a person, a place or an object, what an NPC is like, how the body feels. "
+    "When the player asks about an NPC or anything else in the world, answer by narrating it from the facts and the knowledge you hold, and add nothing new. "
+    "Everything about the game mechanics is stated plainly outside the blockquote: rolls, ratings, pools, spends, Blocks, time left in the turn, rules, and the status line. "
+    "OPENING: when narration_hints.opening is true this is the first narration of the game. Make it long and rich (about 600 to 1000 words at medium, "
+    "about 350 to 500 at low and 1000 to 1500 at high; several paragraphs): first the setting (place, year, the season and hour, a short historical or social background that bears on "
     "the adventure), then the character (background, profession, how they look, what drives them, who they care about), using only the "
     "facts, then the scene. Offer the character's portrait when the illustrations list has one. "
     "SECTIONS AFTER THE NARRATION, always in this order, in plain text outside the blockquote: the notebook entry and status; then, whenever "
@@ -597,7 +606,7 @@ class Engine:
             c["client_sync"]["updated_at"] = iso(self.now())
             ws.touch("character", c["id"])
             out["deliveries"].append({"game_id": c["game_id"], "character_id": c["id"], "items": [self._client_item(i) for i in items],
-                                      "sync": redact.sync_block(g, c, allc)})
+                                      "narration_verbosity": redact.verbosity(g, c), "sync": redact.sync_block(g, c, allc)})
         out["illustrations"] = self._new_illustrations(ws, player_id, chars, mark)
         new_ids = {i["image_id"] for i in out["illustrations"]}
         out["illustrations_older"] = len({im["id"] for c in chars for im in ws.find("image", game_id=c["game_id"], status="ready")
@@ -1352,7 +1361,7 @@ class Engine:
         return self.start_task(player_id, "create_game", {"adventure_id": adventure_id, "title": title, "language": language,
                                                           "settings": settings or {}, "display_name": display_name})
 
-    def _create_game(self, player_id, adventure_id, title=None, language=None, settings=None, display_name=None):
+    def _create_game(self, player_id, adventure_id, title=None, language=None, settings=None, display_name=None, verbosity=None):
         ws = self._ws()
         p = self._player(ws, player_id, display_name, language)
         adv = self._adventure(ws, adventure_id)
@@ -1372,7 +1381,9 @@ class Engine:
         gid = short("g")
         game = {"id": gid, "title": title or adv.get("title"), "phase": "characters", "format": None, "party_size_at_start": None,
                 "host_player_id": player_id, "language": language or p.get("language", "en"), "adventure_id": adventure_id,
-                "ruleset_id": adv["ruleset_id"], "settings": s, "roster": [{"player_id": player_id, "character_id": None}],
+                "ruleset_id": adv["ruleset_id"], "settings": s,
+                "roster": [{"player_id": player_id, "character_id": None,
+                            "narration_verbosity": verbosity if verbosity in NARRATION_LEVELS else p.get("narration_verbosity") or "medium"}],
                 "roster_history": [], "clock": {"turn": 0, "day": 0, "block": None, "deadline_turn": None, "turn_opens": None, "turn_closes": None},
                 "gm_state": {}, "chronicle": "", "world_facts": [], "events": [], "decisions": [], "scheduled_events": [],
                 "messages": [], "turns": [], "setup": {"answers": {}, "inbox": {}}}
@@ -1385,7 +1396,7 @@ class Engine:
                 **self._finish(ws, player_id, gid)}
 
     # ---- join_game
-    def join_game(self, player_id, game_id, display_name=None, language=None):
+    def join_game(self, player_id, game_id, display_name=None, language=None, narration_verbosity=None):
         ws = self._ws()
         p = self._player(ws, player_id, display_name, language)
         game = self._game(ws, game_id)
@@ -1397,7 +1408,10 @@ class Engine:
         maxp = (adv.get("players") or {}).get("max", 5)
         if len(game["roster"]) >= maxp:
             raise EngineError("the game is full")
-        game["roster"].append({"player_id": player_id, "character_id": None})
+        if narration_verbosity and narration_verbosity not in NARRATION_LEVELS:
+            raise EngineError("narration_verbosity must be low, medium or high")
+        game["roster"].append({"player_id": player_id, "character_id": None,
+                               "narration_verbosity": narration_verbosity or p.get("narration_verbosity") or "medium"})
         if game_id not in p["games"]:
             p["games"].append(game_id)
         ws.touch("game", game_id)
@@ -1604,7 +1618,8 @@ class Engine:
             if "illustrations" not in s and self._images_available():
                 s["illustrations"] = "on"  # the default; the validator required an image_style
             out = self._create_game(player_id, params["adventure_id"], package.get("title") or params.get("title"),
-                                    package.get("language") or params.get("language"), s, package.get("display_name") or params.get("display_name"))
+                                    package.get("language") or params.get("language"), s, package.get("display_name") or params.get("display_name"),
+                                    package.get("narration_verbosity"))
             done({"game_id": out["game_id"]})
             return {"accepted": True, "task_id": task_id, **out}
         # generate_character
@@ -1893,6 +1908,31 @@ class Engine:
         except (GeminiTrouble, AIMasterBusy, EngineError):
             pass
 
+    # ---- TLR-07-010: the verbosity of the client's narration belongs to the player (not to a character, which can be replaced) and to the game.
+    def set_narration(self, player_id, verbosity, game_id=None):
+        """With a game: that game only. Without: the player's default for games they join or create from now on, and every game they are in
+        that has not been set by hand yet is left as it is."""
+        if verbosity not in NARRATION_LEVELS:
+            raise EngineError("verbosity must be low, medium or high")
+        ws = self._ws()
+        p = self._player(ws, player_id)
+        if game_id:
+            game = self._game(ws, game_id)
+            r = next((r for r in game["roster"] if r["player_id"] == player_id), None)
+            if r is None:
+                raise EngineError("this player has not joined the game")
+            r["narration_verbosity"] = verbosity
+            ws.touch("game", game_id)
+            for c in ws.find("character", game_id=game_id, player_id=player_id):
+                c["client_sync"]["version"] = c["client_sync"].get("version", 0) + 1  # the client sees that its settings changed
+                ws.touch("character", c["id"])
+        else:
+            p["narration_verbosity"] = verbosity
+            ws.touch("player", player_id)
+        ws.commit()
+        return {"narration_verbosity": verbosity, "game_id": game_id or None,
+                "applies_to": "this game" if game_id else "games you create or join from now on"}
+
     # ---- TLR-01-009, level 2: a free query with a known `topic` is answered from the database. No AI Master call, no quota.
     def _answer_level2(self, ws, game, player_id, c, topic):
         data = level2.answer(topic, game, c, ws.load_game_characters(game["id"]), self.now(), self._span_blocks(game))
@@ -1903,8 +1943,11 @@ class Engine:
             except Exception:
                 pass
         return self._finish(ws, player_id, game["id"], {
-            "handling": "answered", "level": 2, "topic": topic, "answer": data,
+            "handling": "answered", "level": 2, "topic": topic, "answer": data, "presentation": level2.PRESENTATION.get(topic, "plain"),
+            "narration_verbosity": redact.verbosity(game, c),
             "note": "Answered by the server from the game's data; the AI Master was not asked. Tell the player in their language. "
+                    "presentation `narrate`: this is about the game world, so narrate it in the voice of the story (at the player's narration_verbosity), as bold blockquote "
+                    "paragraphs, not as a list. presentation `plain`: this is game mechanics, so state it plainly outside the narration. "
                     "Add nothing that is not here; for anything else send a free_query without a topic."})
 
     # ---- TLR-03-009 / 07-009 / 07-004: when the AI Master cannot answer (Gemini down, or over its quota), an `action` is not refused: it is saved

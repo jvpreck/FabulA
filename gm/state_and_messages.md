@@ -85,7 +85,7 @@ An adventure file or stored adventure defines its own NPCs and locations with st
 {
   "id":"g_001","title":"The Quiet Mill","phase":"active","format":"party","party_size_at_start":2,"host_player_id":"p_jorge","language":"en","adventure_id":"quiet_mill_1930","ruleset_id":"example_ruleset",
   "settings":{"turn_interval_hours":24,"turn_close_hour":3,"turn_timezone":"Europe/Madrid","turn_span":"day","early_close":false,"pvp":"soft","lethality":"high","tone_preset":"sordid_gritty","modules":["hazard_stages","perception","belief_states","blocks_clocks"],"players_expected":1,"setup_deadline":"2026-11-01T18:00:00Z","crisis":{"active":false,"turn_span":"beat","turn_interval_hours":24}},
-  "roster":[{"player_id":"p_jorge","character_id":"c_iris"},{"player_id":"p_ana","character_id":"c_marcus"}],
+  "roster":[{"player_id":"p_jorge","character_id":"c_iris","narration_verbosity":"medium"},{"player_id":"p_ana","character_id":"c_marcus","narration_verbosity":"high"}],
   "clock":{"turn":3,"day":3,"block":"Morning","deadline_turn":5,"turn_opens":"2026-11-03T08:00:00Z","turn_closes":"2026-11-04T08:00:00Z"},
   "gm_state":{"tension":2,"pressure":1,"intensity":"mild","clock_steps":0,"clue_progress":{"C1":{"characters":["c_iris"],"turn":2,"route":"automatic"}},"flags":{}},
   "chronicle":"GM-only running summary, at most 400 words, rewritten every turn.",
@@ -100,7 +100,7 @@ An adventure file or stored adventure defines its own NPCs and locations with st
 - `phase`: `characters`, `active`, `epilogue`, `closed` (`setup` is no longer used). The server moves a game from `characters` to `active` when every player in `roster` has a confirmed (`active`) character and at least `settings.players_expected` players have one; you never set `phase` for that. `format`: `solo` or `party`, from the number of players when `setup` ends; `party_size_at_start` is fixed once `active` begins.
 - `adventure_id` and `ruleset_id` point at fixed records; the game never copies the adventure.
 - `settings.turn_span`: `day` (four Blocks), `block` (one Block), `beat` (crisis). `pvp`: `none`, `soft`, `full`. **`lethality`: `low`, `moderate`, `high`** (protocol §6); set during setup, changeable only by the host before `active`, or by agreement of every player afterwards. `illustrations`: `off` (default) or `on`, set by the host; it only says whether you may propose pictures (§6.7). `image_style`: the fixed picture style, written at creation, immutable.
-- `roster` links each player to their character in this run; a player who replaces a dead character appears with the new `character_id`, the old one stays on record.
+- `roster` links each player to their character in this run, and holds the player's own `narration_verbosity` (`low`, `medium`, `high`: how much their client narrates; it is not for you, you write facts); a player who replaces a dead character appears with the new `character_id`, the old one stays on record.
 - `clock.turn` is the open turn; `clock.day` and `clock.block` are the in-game time at its start.
 - GM-only: `gm_state`, `chronicle`, `decisions[].gm_impact`, `scheduled_events`, `turns[].dice_log`, and `world_facts` whose `visibility` excludes the character.
 - `world_facts`: facts about this run the adventure does not state. `visibility`: `"gm"`, `"all"` or a list of character ids. `source`: `adventure`, `oracle`, `play`, `player` or `truth` (the immutable rational truth of an emergent adventure, GM-only).
