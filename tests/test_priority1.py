@@ -321,7 +321,11 @@ def test_a_character_check_must_return_a_verdict_in_the_schema_sent_for_it():
     assert schema.check({"status": "ok", "results": {}}, s), "and neither is nothing"
     assert schema.check({"status": "ok", "results": {}, "validation": {}}, s), "nor an empty block"
     assert schema.check({"status": "ok", "validation": None}) == [], "other requests may leave it null"
-    assert "validation" not in schema.for_request("intake", {"kind": "action"})["required"]
+    a = schema.for_request("intake", {"kind": "action"})
+    assert "validation" not in a["required"] and "action" in a["required"] and schema.bare_objects(a) == []
+    assert schema.check({"status": "ok", "handling": "queued", "action": {"parsed": {"blocks": [{"block": "Morning", "intent": "search"}]}}}, a) == []
+    assert schema.check({"status": "ok", "handling": "queued", "action": None}, a), "an action request needs its parse"
+    assert schema.check({"status": "ok", "handling": "queued", "action": {"parsed": {"blocks": [{"block": "Morning"}]}}}, a), "a block says its intent"
     assert "results" in schema.for_request("resolve_turn", None)["required"]
 
 
@@ -330,3 +334,21 @@ def test_the_schema_is_chosen_from_the_envelope_text():
     env = _j.dumps({"mode": "intake", "request": {"kind": "character_submission"}})
     assert "validation" in schema.for_envelope(env)["required"]
     assert schema.for_envelope("not json") is schema.RESPONSE_SCHEMA
+
+
+def test_a_bare_400_from_the_provider_counts_as_a_refusal_of_the_schema(monkeypatch):
+    """Seen 2026-11-09: the provider refused a too-large schema with 'Request contains an invalid argument' and no word about a schema."""
+    monkeypatch.setattr(config, "GEMINI_STRUCTURED_OUTPUT", True)
+    sent = []
+
+    class Models:
+        def generate_content(self, model, contents, config):
+            sent.append(config.response_json_schema)
+            if config.response_json_schema is not None:
+                raise Exception("400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.'}}")
+            return type("R", (), {"text": "{}", "usage_metadata": None})()
+
+    gm = GeminiGM(usage=None)
+    monkeypatch.setattr(gm, "_get", lambda: type("C", (), {"models": Models()})())
+    assert gm.call("s", "{}", tier="light") == "{}"
+    assert sent[0] is not None and sent[1] is None and gm.last_meta["schema_disabled"]

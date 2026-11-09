@@ -34,20 +34,15 @@ def obj(properties, required=(), extra=True):
 
 
 FACT = obj({"block": NSTR, "kind": STR, "text": STR}, ["text"])
-ROLL = obj({"block": NSTR, "ability": STR, "type": STR, "spend": NUM, "die": NSTR, "value": NINT, "total": {"type": ["number", "null"]},
-            "outcome": NSTR, "note": NSTR})
 PROMPT = obj({"id": STR, "type": STR, "text": STR, "options": {"type": "array", "items": ANY}}, ["id", "type", "text"])
+# Only the keys the server and the player depend on are declared. The provider refuses a schema that is too large (a bare 400 INVALID_ARGUMENT:
+# the full result item with roll_report, narration_hints and the rest, plus the action parse, was refused on 2026-11-09), and an object that
+# allows extra keys (additionalProperties) still gets them when the instructions ask for them.
 RESULT_ITEM = obj({
     "kind": {"type": "string", "enum": ["own", "witness", "message", "speech", "system"]},
     "language": STR,
     "facts": {"type": "array", "items": FACT},
-    "roll_report": {"type": "array", "items": ROLL},
-    "notebook_entry": NSTR,
-    "status_line": NSTR,
-    "spend_offers": {"type": "array", "items": FREE},
-    "ally_advice": {"type": "array", "items": FREE},
     "prompts": {"type": "array", "items": PROMPT},
-    "narration_hints": obj({"mood": NSTR, "pace": NSTR, "senses": STRS, "do_not": STRS, "opening": {"type": "boolean"}}),
 }, ["kind", "facts"])
 
 STATE_CHANGE = obj({
@@ -78,8 +73,11 @@ VALIDATION = {"type": ["object", "null"], "additionalProperties": True, "propert
     "checks": {"type": "array", "items": obj({"n": INT, "name": STR, "result": STR, "note": NSTR})},
     "adjustments": {"type": "array", "items": FREE},
 }}
+# The parse of a player's action (state contract 3.7). Blocks are declared; share, messages, tasks and the other lists are allowed, not declared.
+BLOCK = obj({"block": NSTR, "intent": STR, "abilities": STRS}, ["intent"])
+PARSED = obj({"blocks": {"type": "array", "items": BLOCK}})
 ACTION = {"type": ["object", "null"], "additionalProperties": True, "properties": {
-    "parsed": FREE, "supersedes": STRS, "clarifications": {"type": "array", "items": ANY}}}
+    "parsed": PARSED, "supersedes": STRS}}
 
 RESPONSE_SCHEMA = obj({
     "status": {"type": "string", "enum": ["ok", "needs_dice", "error"]},
@@ -184,6 +182,9 @@ def for_request(mode, request):
     if mode == "intake" and kind == "character_submission":
         s["properties"]["validation"] = copy.deepcopy(VERDICT)  # a verdict, not null
         s["required"] = s["required"] + ["validation", "results"]
+    elif mode == "intake" and kind == "action":
+        s["properties"]["action"] = obj({"parsed": copy.deepcopy(PARSED), "supersedes": STRS}, ["parsed"])  # the parse of the action, not null
+        s["required"] = s["required"] + ["action", "handling"]
     elif mode == "resolve_turn":
         s["required"] = s["required"] + ["results"]
     return s

@@ -297,7 +297,9 @@ class GeminiGM:
     @staticmethod
     def _schema_rejected(e):
         m = f"{type(e).__name__} {e}".lower()
-        return ("400" in m or "invalid_argument" in m or "invalid argument" in m) and ("schema" in m or "response_json" in m)
+        # the provider's refusal of a schema is often a bare "400 INVALID_ARGUMENT: Request contains an invalid argument" (seen 2026-11-09),
+        # and the schema is the only argument that changes with this setting, so any such 400 counts
+        return "400" in m or "invalid_argument" in m or "invalid argument" in m
 
     @staticmethod
     def _retryable(e):
