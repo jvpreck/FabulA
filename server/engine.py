@@ -206,8 +206,7 @@ class Engine:
             "locations": locations,
             "location_states": location_states,
             "submit_action": sa, "players": players,
-            "dice": make_dice(60 * dice_scale, 30 * dice_scale, 30 * dice_scale) if mode != "resolve_turn" else
-            make_dice((40 + 30 * len(chars)) * dice_scale, 30 * dice_scale, 30 * dice_scale),
+            "dice": self._dice(mode, request, len(chars), dice_scale),
             "request": request,
         }
         brief = self._illustration_brief(ws, game, chars) if mode == "resolve_turn" else None
@@ -224,6 +223,33 @@ class Engine:
         if previous_errors:
             env["previous_errors"] = previous_errors
         return env
+
+    DICE_FREE_KINDS = {"free_query", "message", "game_created", "join", "setup_answers", "character_submission", "character_confirm"}
+
+    @classmethod
+    def _dice(cls, mode, request, n_chars, scale=1):
+        """TLR-03-014: the dice sent are proportional to what the request can need. The turn close grows with the characters; a request that
+        never rolls gets a few; an action or a decision gets enough for a turn's Blocks. (With the old numbers, 120 dice were sent every time.)"""
+        if mode == "resolve_turn":
+            return make_dice((40 + 30 * n_chars) * scale, 30 * scale, 30 * scale)
+        d6, d10, d20 = config.DICE_SMALL if (request or {}).get("kind") in cls.DICE_FREE_KINDS else config.DICE_ACTION
+        return make_dice(d6 * scale, d10 * scale, d20 * scale)
+
+    @staticmethod
+    def _dumps(env):
+        """TLR-03-014: the request as the AI Master receives it. Compact separators, and no empty values (null, "", [], {}) except in `request`
+        and `dice`: the state contract says that a field that is missing is not set."""
+        if not config.ENVELOPE_COMPACT:
+            return json.dumps(env, ensure_ascii=False)
+
+        def strip(x):
+            if isinstance(x, dict):
+                return {k: v for k, v in ((k, strip(v)) for k, v in x.items()) if v not in (None, "", [], {})}
+            if isinstance(x, list):
+                return [strip(v) for v in x]
+            return x
+        keep = {k: env[k] for k in ("request", "dice", "mode") if k in env}
+        return json.dumps({**strip({k: v for k, v in env.items() if k not in keep}), **keep}, ensure_ascii=False, separators=(",", ":"))
 
     @staticmethod
     def _relevant_only(game, mode, requester_cid):
@@ -309,7 +335,7 @@ class Engine:
             outcome = "ok"
             try:
                 try:
-                    resp = parse(self.gm.call(system, json.dumps(env, ensure_ascii=False), tier=tier))
+                    resp = parse(self.gm.call(system, self._dumps(env), tier=tier))
                 except GMBusy as e:
                     outcome = "failed"
                     raise AIMasterBusy(str(e))

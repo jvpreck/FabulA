@@ -49,7 +49,7 @@ def test_the_turn_close_receives_the_saved_action_to_parse(world):
     gm.call = back
     assert eng.resolve_turn(gid)["resolved"] is True
     acts = seen[0]["submit_action"]["actions"][cid]
-    assert acts[0]["needs_parse"] is True and acts[0]["raw_text"] == "I will visit Tom." and acts[0]["parsed"] is None
+    assert acts[0]["needs_parse"] is True and acts[0]["raw_text"] == "I will visit Tom." and "parsed" not in acts[0]  # the empty value is left out of the request
     sa, _ = store.get("submit_action", f"{gid}:1")
     assert sa["actions"][cid][0]["status"] == "resolved"
 

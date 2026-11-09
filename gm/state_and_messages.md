@@ -3,7 +3,7 @@
 
 > **GM-FACING FILE.** This file defines what is stored in Supabase, what the MCP server sends you (the **envelope**), and what you must return (the **response**). It is independent of any ruleset and any adventure. The shape of every JSON object comes from this file. How to behave comes from the protocol. Mechanics come from the ruleset, and the world comes from the adventure.
 >
-> All JSON examples use illustrative ids and values. Field names and value sets are the contract. `null` means "not set". Stat names inside a `sheet` are examples: the ruleset defines the real ones.
+> All JSON examples use illustrative ids and values. Field names and value sets are the contract. `null` means "not set". In the request you receive, empty values (`null`, `""`, `[]`, `{}`) are left out to save space: a field that is missing is not set, or empty. (`request` and `dice` are sent whole.) Stat names inside a `sheet` are examples: the ruleset defines the real ones.
 
 ---
 
