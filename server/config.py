@@ -34,6 +34,21 @@ def _models(env, legacy, default):
 # between turns (many requests, speed and a high daily allowance first).
 GEMINI_STRONG_MODELS = _models("GEMINI_STRONG_MODELS", ["GEMINI_MODEL_TURN"], ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.8-flash"])
 GEMINI_LIGHT_MODELS = _models("GEMINI_LIGHT_MODELS", ["GEMINI_MODEL_LIGHT", "GEMINI_MODEL"], ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"])
+# OpenRouter (2026-11-11): a second provider, used only after every Gemini model of a tier has failed (a whole-provider outage such as the one of
+# 2026-11-10, 15:05 to about 04:45 UTC). Free models (`:free`) only: 20 requests a minute and 50 a day for the whole account (1,000 after a one-time
+# purchase of 10 credits), no token limit. Entries are named `openrouter:<model id>` in the chains. On when OPENROUTER_API_KEY is set
+# (OPENROUTER=off turns it off). Order agreed with the owner: strong Nemotron 3 Ultra then MiniMax M3.1 Flash; light MiniMax M3.1 Flash then Nemotron 3 Super.
+OPENROUTER_PREFIX = "openrouter:"
+OPENROUTER_ENABLED = bool(os.environ.get("OPENROUTER_API_KEY")) and os.environ.get("OPENROUTER", "on").lower() not in ("off", "0", "false", "no")
+OPENROUTER_URL = os.environ.get("OPENROUTER_URL", "https://openrouter.ai/api/v1/chat/completions")
+OPENROUTER_STRONG_MODELS = _models("OPENROUTER_STRONG_MODELS", [], ["nvidia/nemotron-3-ultra-550b-a55b:free", "minimax/minimax-m3.1-flash:free"])
+OPENROUTER_LIGHT_MODELS = _models("OPENROUTER_LIGHT_MODELS", [], ["minimax/minimax-m3.1-flash:free", "nvidia/nemotron-3-super-120b-a12b:free"])
+OPENROUTER_TIMEOUT_SECONDS = int(os.environ.get("OPENROUTER_TIMEOUT_SECONDS", "110"))  # the last model of a chain; free reasoning models are slow
+OPENROUTER_QUICK_TIMEOUT_SECONDS = int(os.environ.get("OPENROUTER_QUICK_TIMEOUT_SECONDS", "75"))  # a model with another behind it
+if OPENROUTER_ENABLED:
+    GEMINI_STRONG_MODELS = GEMINI_STRONG_MODELS + [OPENROUTER_PREFIX + m for m in OPENROUTER_STRONG_MODELS]
+    GEMINI_LIGHT_MODELS = GEMINI_LIGHT_MODELS + [OPENROUTER_PREFIX + m for m in OPENROUTER_LIGHT_MODELS]
+
 GEMINI_MODEL_TURN = GEMINI_STRONG_MODELS[0]   # the first choice of each tier (the names older code and the host status use)
 GEMINI_MODEL_LIGHT = GEMINI_LIGHT_MODELS[0]
 GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "medium")
@@ -57,11 +72,12 @@ GEMINI_LIMITS = {
     # images: Cloudflare gives 10,000 Neurons a day. klein 4B costs about 26 per 512 output tile, 5 per input tile: a 1024 picture with
     # references is about 120, a 512 reference about 26. Calls per day are kept low enough for a mix of both.
     "image": {"rpd": int(os.environ.get("IMAGE_RPD", "80")), "rpm": int(os.environ.get("IMAGE_RPM", "10"))},
+    "openrouter": {"rpd": int(os.environ.get("OPENROUTER_RPD", "45")), "rpm": int(os.environ.get("OPENROUTER_RPM", "18"))},  # account-wide, all :free models
 }
 TURN_TIMEZONE = os.environ.get("TURN_TIMEZONE", "Europe/Madrid")  # where "the hour a turn closes" is counted
 TURN_CLOSE_HOUR = int(os.environ.get("TURN_CLOSE_HOUR", "3"))  # default hour (0-23) for games whose turn is a whole number of days; -1 = exactly one interval after opening
 GEMINI_QUOTA_TZ = "America/Los_Angeles"  # provider quotas reset at midnight Pacific
-QUOTA_TZ = {"turn": GEMINI_QUOTA_TZ, "light": GEMINI_QUOTA_TZ, "image": "UTC"}  # Cloudflare's free allowance resets at 00:00 UTC
+QUOTA_TZ = {"turn": GEMINI_QUOTA_TZ, "light": GEMINI_QUOTA_TZ, "image": "UTC", "openrouter": "UTC"}  # Cloudflare's free allowance resets at 00:00 UTC
 
 # Illustrations (Cloudflare Workers AI, FLUX.2 klein 4B, which accepts reference images). Needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN; without them the option is unavailable.
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "@cf/black-forest-labs/flux-2-klein-4b")

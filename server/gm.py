@@ -224,7 +224,8 @@ class Usage:
             doc = self.store.get("usage", f"{tier}:{self._day(self.now_fn(), tier)}")[0] or {}
             out[tier] = {"used_today": doc.get("count", 0), "daily_limit": config.GEMINI_LIMITS[tier]["rpd"],
                          "per_minute_limit": config.GEMINI_LIMITS[tier]["rpm"],
-                         "model": {"turn": config.GEMINI_MODEL_TURN, "light": config.GEMINI_MODEL_LIGHT, "image": config.IMAGE_MODEL}[tier]}
+                         "model": {"turn": config.GEMINI_MODEL_TURN, "light": config.GEMINI_MODEL_LIGHT, "image": config.IMAGE_MODEL,
+                                   "openrouter": "free models: " + ", ".join(config.OPENROUTER_STRONG_MODELS + config.OPENROUTER_LIGHT_MODELS)}.get(tier)}
         return out
 
 
@@ -248,6 +249,8 @@ class GeminiGM:
         self._caches = {}  # cache key -> {"name", "expires"}: the provider-side copy of an instruction text
         self._cache_off = {}  # model -> {"until", "note"}: the provider's free tier offers caching for some models only
         self._sleep = sleep or __import__("time").sleep
+        self._openrouter_key = None  # tests set it; production reads OPENROUTER_API_KEY
+        self._no_json_mode = set()  # OpenRouter models that refused response_format
 
     def _get(self):
         if self._client is None:
@@ -267,7 +270,64 @@ class GeminiGM:
                                              http_options=types.HttpOptions(api_version="v1beta"))
         return self._beta_client
 
+    # ---- OpenRouter: the second provider (config.OPENROUTER_*). An OpenAI-style chat completion over HTTPS with the standard library.
+    # Errors are turned into messages the chain already understands: 429/5xx/timeouts move on to the next model, and an account or model
+    # problem (401, 402, 403, 404) is reported as "unavailable" so the next model is tried instead of failing the player's request.
+    _OR_EFFORT = {"minimal": "low", "low": "low", "medium": "medium", "high": "high"}
+
+    def _generate_openrouter(self, model, level, system, user):
+        import os
+        import urllib.error
+        import urllib.request
+        name = model[len(config.OPENROUTER_PREFIX):]
+        self._meta["provider"] = "openrouter"
+        if self.usage is not None:
+            r = self.usage.reserve("openrouter")
+            if r != "ok":  # the account-wide free allowance; the wording lets the breaker leave the model alone for the right time
+                raise Exception(f"429 RESOURCE_EXHAUSTED: OpenRouter free-model quota {'PerDay' if r == 'day' else 'PerMinute'} used up")
+        body = {"model": name, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                "reasoning": {"effort": self._OR_EFFORT.get(level, "medium")}}
+        if name not in self._no_json_mode:
+            body["response_format"] = {"type": "json_object"}
+        timeout = self._timeout_override and config.OPENROUTER_QUICK_TIMEOUT_SECONDS or config.OPENROUTER_TIMEOUT_SECONDS
+        while True:
+            req = urllib.request.Request(config.OPENROUTER_URL, data=json.dumps(body).encode("utf-8"), method="POST", headers={
+                "Authorization": "Bearer " + (self._openrouter_key or os.environ.get("OPENROUTER_API_KEY", "")),
+                "Content-Type": "application/json", "HTTP-Referer": "https://fabula-rpg.vercel.app", "X-Title": "FabulA"})
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode("utf-8", "replace")[:300]
+                if e.code == 400 and "response_format" in body and ("response_format" in detail or "json" in detail.lower()):
+                    self._no_json_mode.add(name)  # this model has no JSON mode: ask without it (the prompt already demands JSON)
+                    body.pop("response_format")
+                    continue
+                if e.code in (401, 402, 403, 404):
+                    raise Exception(f"unavailable: OpenRouter {e.code} for {name}: {detail}") from None
+                raise Exception(f"{e.code} OpenRouter {name}: {detail}") from None
+            except (TimeoutError, OSError) as e:
+                raise Exception(f"timeout or connection error from OpenRouter {name}: {e}") from None
+        if data.get("error"):  # some upstream failures arrive with HTTP 200
+            err = data["error"]
+            raise Exception(f"{err.get('code', 502)} OpenRouter {name}: {str(err.get('message', ''))[:200]} unavailable")
+        try:
+            text = data["choices"][0]["message"].get("content") or ""
+        except (KeyError, IndexError, TypeError):
+            text = ""
+        if not text.strip():
+            raise Exception(f"502 OpenRouter {name}: empty answer")
+        u = data.get("usage") or {}
+        self._meta.update(tokens_in=u.get("prompt_tokens", 0) or 0,
+                          tokens_cached=(u.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0,
+                          tokens_out=u.get("completion_tokens", 0) or 0,
+                          tokens_thought=(u.get("completion_tokens_details") or {}).get("reasoning_tokens", 0) or 0)
+        return text
+
     def _generate(self, model, level, system, user):
+        if model.startswith(config.OPENROUTER_PREFIX):
+            return self._generate_openrouter(model, level, system, user)
         from google.genai import types
         name = self._cached(model, system)
         base = dict(
