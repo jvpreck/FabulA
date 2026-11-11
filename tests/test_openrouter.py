@@ -71,7 +71,8 @@ def test_when_gemini_is_down_the_turn_close_is_answered_by_openrouter(http):
     script.append(ok_body())
     gm = GM()
     assert gm.call("sys", '{"request":{}}', tier="turn", effort="high") == '{"status": "ok"}'
-    assert gm.gemini_calls >= 1 and gm.last["model"] == OR_S and "answered by " + OR_S in gm.last["degraded"]
+    assert gm.gemini_calls >= 1 and gm.last["model"] == OR_S and "answered by " + OR_S in gm.last["fallback"]
+    assert gm.last["degraded"] is None and gm.last["provider"] == "openrouter"
     sent = seen[0]
     assert sent["body"]["model"] == "nvidia/nemotron-3-ultra-550b-a55b:free"
     assert sent["body"]["messages"][0] == {"role": "system", "content": "sys"} and sent["body"]["reasoning"] == {"effort": "high"}
@@ -138,3 +139,46 @@ def test_the_quick_and_final_timeouts(http):
     config.GEMINI_STRONG_MODELS[:] = monkeypatch_chain  # only OpenRouter models: the first is quick, the last gets the full timeout
     GM().call("s", "{}", tier="turn")
     assert seen[0]["timeout"] == config.OPENROUTER_QUICK_TIMEOUT_SECONDS and seen[-1]["timeout"] == config.OPENROUTER_TIMEOUT_SECONDS
+
+
+# ---- 2026-11-11: every engine answer names the model that answered each AI Master call made for it
+from test_engine import start_solo, world  # noqa: E402,F401  (the fixture)
+from test_ready import party, ready  # noqa: E402,F401
+
+
+def with_model(gm, model, provider, tier="light", degraded=None, fallback=None):
+    orig = gm.call
+
+    def call(system, user, tier_=tier, **kw):
+        out = orig(system, user, tier_)
+        gm.last = {"tier": tier_, "model": model, "provider": provider, "degraded": degraded, "fallback": fallback}
+        return out
+    gm.call = lambda system, user, tier="light", **kw: call(system, user, tier)
+
+
+def test_an_action_answer_names_the_model_that_answered(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    with_model(gm, OR_L, "openrouter", fallback="light model g-light unavailable, answered by " + OR_L)
+    out = eng.submit_action("p_jorge", gid, "action", "search the desk", cid)
+    assert out["ai_models"] == [{"mode": "intake", "kind": "action", "model": OR_L, "provider": "openrouter", "tier": "light",
+                                 "fallback": "light model g-light unavailable, answered by " + OR_L}]
+
+
+def test_a_database_answer_names_no_model(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    with_model(gm, "g-light", "gemini")
+    out = eng.submit_action("p_jorge", gid, "free_query", "", cid, {"topic": "time"})
+    assert "ai_models" not in out
+
+
+def test_a_turn_close_records_the_model_provider_and_degradation_on_the_turn(world):
+    eng, store, gm, clock = world
+    gid, c = party(eng)
+    with_model(gm, "g-light", "gemini", degraded="turn models unavailable")
+    ready(eng, "p_a", gid, c["p_a"])
+    out = ready(eng, "p_b", gid, c["p_b"])
+    assert out["handling"] == "resolved_turn" and any(m["mode"] == "resolve_turn" and m["degraded"] for m in out["ai_models"])
+    t1 = store.get("game", gid)[0]["turns"][0]
+    assert t1["gm_model"] == "g-light" and t1["gm_provider"] == "gemini" and t1["gm_degraded"] == "turn models unavailable"

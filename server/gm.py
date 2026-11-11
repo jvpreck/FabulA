@@ -657,10 +657,15 @@ class GeminiGM:
                     self.usage.model_record(model, self._meta.get("tokens_in") or tokens)
                 except Exception:
                     pass
+            # 2026-11-11 (owner): any strong model is a full answer and a light model is normal for a light request; only a strong request
+            # answered by a light model is `degraded` (the note carried in from the strong chain). Another model of the same list is `fallback`.
+            fallback = None
             if model != chain[0]:
                 self._meta["fallback"] = "used"
-                degraded = (degraded + "; " if degraded else "") + f"{tier} model {chain[0]} unavailable, answered by {model}"
-            self.last = {"tier": tier, "model": model, "degraded": degraded}
+                fallback = f"{tier} model {chain[0]} unavailable, answered by {model}"
+            provider = "openrouter" if model.startswith(config.OPENROUTER_PREFIX) else "gemini"
+            self._meta["provider"] = provider
+            self.last = {"tier": tier, "model": model, "provider": provider, "degraded": degraded, "fallback": fallback}
             return out, degraded
         note = (degraded + "; " if degraded else "") + f"{tier} models unavailable ({type(last_error).__name__})"
         if final:

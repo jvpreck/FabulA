@@ -348,6 +348,7 @@ class Engine:
                 try:
                     extra = {"effort": self._effort(mode, request)} if getattr(self.gm, "supports_effort", False) else {}
                     resp = parse(self.gm.call(system, self._dumps(env), tier=tier, **extra))
+                    self._note_answering_model(mode, request)
                 except GMBusy as e:
                     outcome = "failed"
                     raise AIMasterBusy(str(e))
@@ -421,6 +422,23 @@ class Engine:
         except Exception:
             pass
 
+    # 2026-11-11 (owner): every engine answer says which model answered each AI Master call made for it, for debugging (`ai_models`).
+    def _note_answering_model(self, mode, request):
+        last = getattr(self.gm, "last", None) or {}
+        if not last.get("model"):
+            return
+        entry = {"mode": mode, "kind": (request or {}).get("kind") or mode, "model": last.get("model"), "provider": last.get("provider"),
+                 "tier": last.get("tier")}
+        for k in ("degraded", "fallback"):
+            if last.get(k):
+                entry[k] = last[k]
+        self.__dict__.setdefault("_ai_models", []).append(entry)
+
+    def _take_ai_models(self):
+        out = self.__dict__.get("_ai_models") or []
+        self._ai_models = []
+        return out
+
     def _note_model(self, ws, game_id, mode, turn):
         """Records which model closed a turn and whether it was the fallback, so the host can see it."""
         last = getattr(self.gm, "last", None) or {}
@@ -430,8 +448,11 @@ class Engine:
         entry = next((t for t in game.get("turns", []) if t["n"] == turn), None)
         if entry is not None:
             entry["gm_model"] = last.get("model")
+            entry["gm_provider"] = last.get("provider")
             if last.get("degraded"):
                 entry["gm_degraded"] = last["degraded"]
+            if last.get("fallback"):
+                entry["gm_fallback"] = last["fallback"]
             ws.touch("game", game_id)
 
     VALID_RESULTS = ("pass", "pass_with_adjustments", "fail")
@@ -1151,6 +1172,9 @@ class Engine:
         if secs:
             out["picture_seconds"] = secs  # how long drawing this player's pictures added to the call (to judge whether it is too slow)
         out.update(extra or {})
+        models = self._take_ai_models()
+        if models:
+            out["ai_models"] = models
         return out
 
     # ---------------------------------------------------------- accounts
@@ -1798,6 +1822,7 @@ class Engine:
         """TLR-01-016: every answer reports the level at which it was really answered (and, when it differs from what the rules or the client
         expected, why: TLR-03-007, 03-008). TLR-08-005: the level of every request is counted."""
         kind = kind if kind in PLAYER_KINDS else "free_query"
+        self._take_ai_models()
         out = self._submit_action_inner(player_id, game_id, kind, text, character_id, payload)
         try:
             expected = levels.expected_level(kind, payload)

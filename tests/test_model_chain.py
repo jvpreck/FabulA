@@ -45,7 +45,8 @@ def test_a_503_from_the_first_light_model_is_answered_by_the_next_after_one_quic
     g = Fake({L1: E503})
     assert g.call("s", "u") == "{}"
     assert g.sent == [L1, L1, L2], "one quick retry, then the next model"
-    assert g.last["model"] == L2 and "light model light-1 unavailable, answered by light-2" in g.last["degraded"]
+    assert g.last["model"] == L2 and "light model light-1 unavailable, answered by light-2" in g.last["fallback"]
+    assert g.last["degraded"] is None, "a light model answering a light request is normal"
     assert g.last_meta["fallback"] == "used"
 
 
@@ -127,7 +128,8 @@ def test_a_strong_request_goes_to_the_next_strong_model_before_the_light_ones():
     g = Fake({S1: E504})
     assert g.call("s", "u", tier="turn") == "{}"
     assert g.sent == [S1, S2] and g.last["tier"] == "turn" and g.last["model"] == S2
-    assert "turn model strong-1 unavailable, answered by strong-2" in g.last["degraded"]
+    assert "turn model strong-1 unavailable, answered by strong-2" in g.last["fallback"]
+    assert g.last["degraded"] is None, "any strong model is a full answer"
 
 
 def test_when_every_strong_model_fails_the_light_models_answer_and_the_turn_says_so():
