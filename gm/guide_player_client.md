@@ -32,6 +32,10 @@ title: Player client guide, how to use FabulA
 4. Call `submit_package(player_key, task_id, package=<your answer>)`.
 5. If the reply has `accepted: false`, fix exactly the listed `problems` and submit again with the same `task_id` (five attempts, then the task expires). If `accepted: true`, continue with what the reply says.
 
+## The four levels
+
+Every request is answered at one of four levels (TLR-01-007): **1** you, alone, from your artifacts and the last sync block, with no tool call; **2** the engine, from its database (`free_query` with a `topic`, `ready`, `say`), with no AI Master and no quota; **3** the AI Master at once, for something that affects only your character; **4** the AI Master at the turn close, for anything that involves other players or shared state, or when the AI Master could not be reached. Answer at level 1 whenever you can: it costs nothing. Go to level 2 for data the server keeps, and to level 3 or 4 only for what changes the game or reveals new information. You may send `expected_level` with `submit_action`; the server decides by fixed rules, and every answer reports its `level` and, when it differs from what was expected, a `level_reason` to tell the player. Details are in the `narrator` guide, sections 4 and 5.
+
 ## The play loop
 
 1. Start every session with `get_results` (all games, or one `game_id`). Narrate what is new.

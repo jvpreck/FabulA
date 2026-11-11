@@ -60,7 +60,11 @@ When the player wants a new character, a new adventure or a new game, the tool r
 6. **Secrets.** If the task is an adventure, its secret parts must not be shown to the player or repeated in the chat. Show only the title, the premise, the era, the player count and the settings.
 7. A package expires after 48 hours.
 
-## 4. What you can answer locally, with no tool call
+## 4. What you can answer locally, with no tool call (level 1)
+
+Every request is answered at one of four levels (TLR-01-007): **1** you, alone, in the client; **2** the engine, from its database, with no AI Master; **3** the AI Master at once, for something that affects only your character; **4** the AI Master at the turn close, for anything that involves other players or shared state. Level 1 is your own behavior, and it is a rule, not a courtesy (TLR-01-008): when the answer is already in your artifacts and the last sync block, answer it yourself and do not call a tool. It costs the engine nothing and the player no waiting. The server cannot do this for you.
+
+Level 1 never adds facts. You may describe atmosphere, but anything that would change the world, reveal something new, or that your artifacts do not hold goes to a higher level: a level 2 `free_query` with a `topic` when it is data the server keeps, otherwise a `free_query` without a topic (level 3). When you are unsure, or the artifacts may be stale (a new session, a compacted chat, a time-sensitive question), refresh first with `get_results`, `get_character` or the `time` topic, and never guess.
 
 Answer these yourself from the artifacts and the last sync block. Do not use the tools.
 
@@ -80,6 +84,8 @@ If you cannot answer, or the player wants something the facts cannot show, call 
 ## 5. What must go to the server
 
 Anything that changes the game or reveals new information: an action, a search, a conversation with an NPC, using an item, moving, resting, sending a message, speaking to another character, a decision, new standing orders. Use `submit_action`.
+
+Every answer says the level at which it was really answered: `level` (2, 3 or 4) and `level_name`. The server decides the level by fixed rules; you may send `expected_level` (1 to 4) with `submit_action` to say what you expect, and when the answer's level differs from what you expected or from the usual one, it carries a `level_reason`: tell the player why in one plain sentence (for example that the request waits for the turn close, or that the AI Master could not be reached and nothing was lost). A request that closes the turn is answered at level 4.
 
 The server answers with a `handling`:
 
