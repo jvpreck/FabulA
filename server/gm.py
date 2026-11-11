@@ -254,6 +254,7 @@ class GeminiGM:
         self._cache_off = {}  # model -> {"until", "note"}: the provider's free tier offers caching for some models only
         self._sleep = sleep or __import__("time").sleep
         self._openrouter_key = None  # tests set it; production reads OPENROUTER_API_KEY
+        self._chain_deadline = None
         self.route_game = None  # the game of the current call (set by the engine), for OPENROUTER_TEST_GAMES
         self.attempts = []  # the models that failed during the current call: [{model, tier, error}]
         self._no_json_mode = set()  # OpenRouter models that refused response_format
@@ -281,6 +282,21 @@ class GeminiGM:
     # problem (401, 402, 403, 404) is reported as "unavailable" so the next model is tried instead of failing the player's request.
     _OR_EFFORT = {"minimal": "low", "low": "low", "medium": "medium", "high": "high"}
 
+    @staticmethod
+    def _read_until(resp, deadline, name):
+        """The whole body, or a timeout at `deadline`. urllib's timeout covers each socket read only, and OpenRouter keeps a slow request
+        alive by sending blank padding, so without this a call could hang for the whole function (seen 2026-11-11)."""
+        import time
+        chunks = []
+        read = getattr(resp, "read1", None) or resp.read
+        while True:
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"OpenRouter {name}: no complete answer before the deadline (timed out)")
+            chunk = read(65536)
+            if not chunk:
+                return b"".join(chunks)
+            chunks.append(chunk)
+
     def _generate_openrouter(self, model, level, system, user):
         import os
         import urllib.error
@@ -296,13 +312,16 @@ class GeminiGM:
         if name not in self._no_json_mode:
             body["response_format"] = {"type": "json_object"}
         timeout = self._timeout_override and config.OPENROUTER_QUICK_TIMEOUT_SECONDS or config.OPENROUTER_TIMEOUT_SECONDS
+        if self._chain_deadline:
+            timeout = max(1, min(timeout, self._chain_deadline - __import__("time").monotonic()))
+        deadline = __import__("time").monotonic() + timeout
         while True:
             req = urllib.request.Request(config.OPENROUTER_URL, data=json.dumps(body).encode("utf-8"), method="POST", headers={
                 "Authorization": "Bearer " + (self._openrouter_key or os.environ.get("OPENROUTER_API_KEY", "")),
                 "Content-Type": "application/json", "HTTP-Referer": "https://fabula-rpg.vercel.app", "X-Title": "FabulA"})
             try:
                 with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
+                    data = json.loads(self._read_until(resp, deadline, name).decode("utf-8"))
                 break
             except urllib.error.HTTPError as e:
                 detail = e.read().decode("utf-8", "replace")[:300]
@@ -602,6 +621,7 @@ class GeminiGM:
 
     def _call(self, system: str, user: str, tier: str = "light", effort: str | None = None) -> str:
         self.attempts = []
+        self._chain_deadline = None  # set by the first _answer: the strong and the light list share one time budget
         effort = effort if effort in config.THINKING_LEVELS else None
         degraded = None
         if tier == "turn":
@@ -651,9 +671,18 @@ class GeminiGM:
         if order[0] != chain[0] and over[chain[0]] != "ok" and not self._breaker(chain[0]):
             self._meta["limit"] = f"{chain[0]} out of {over[chain[0]]} headroom"
         last_error = None
+        import time as _t
+        self._chain_deadline = self._chain_deadline or (_t.monotonic() + config.CHAIN_TOTAL_SECONDS)
         for i, model in enumerate(order):
+            left = self._chain_deadline - _t.monotonic()
+            if left < config.CHAIN_MIN_SECONDS:  # no time for another model: stop here rather than outlive the function
+                self.attempts.append({"model": model, "tier": tier, "error": f"not tried: {int(left)} s left of the call's time budget"})
+                last_error = last_error or TimeoutError("the call's time budget ran out")
+                break
             quick = i < len(order) - 1
             self._timeout_override = config.CHAIN_TIMEOUT_SECONDS if quick else None
+            if not model.startswith(config.OPENROUTER_PREFIX) and left < (self._timeout_override or config.GEMINI_TIMEOUT_SECONDS):
+                self._timeout_override = max(5, int(left))  # Gemini: never wait longer than the call's time budget allows
             try:
                 out = self._generate_retrying(model, level, system, user,
                                               retries=config.CHAIN_QUICK_RETRIES if quick else None,

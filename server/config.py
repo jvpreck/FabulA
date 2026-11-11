@@ -175,6 +175,9 @@ STRONG_BREAKER_SECONDS = int(os.environ.get("STRONG_BREAKER_SECONDS", "900"))  #
 CHAIN_QUICK_RETRIES = int(os.environ.get("CHAIN_QUICK_RETRIES", "1"))
 CHAIN_QUICK_BUDGET_SECONDS = float(os.environ.get("CHAIN_QUICK_BUDGET_SECONDS", "8"))
 CHAIN_TIMEOUT_SECONDS = int(os.environ.get("CHAIN_TIMEOUT_SECONDS", "45"))
+# The whole list of models of one AI Master call must end well inside the function's 300 s (2026-11-11: a hung OpenRouter call used it all).
+CHAIN_TOTAL_SECONDS = int(os.environ.get("CHAIN_TOTAL_SECONDS", "230"))
+CHAIN_MIN_SECONDS = int(os.environ.get("CHAIN_MIN_SECONDS", "20"))  # do not start a model with less time than this left
 LIGHT_BREAKER_SECONDS = int(os.environ.get("LIGHT_BREAKER_SECONDS", "120"))  # how long a failed light model is left alone (0 = not at all)
 
 # Per-model free-tier limits (requests a minute, input tokens a minute, requests a day), read by the owner from the AI Studio "Rate limit" page of the

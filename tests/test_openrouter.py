@@ -261,3 +261,27 @@ def test_an_outage_error_lists_the_models_tried(monkeypatch):
         raise GeminiTrouble("down")
     out = boom()
     assert out["gemini_unavailable"] and out["models_tried"] == E.gm.attempts
+
+
+
+# ---- 2026-11-11 night: OpenRouter's blank keep-alive padding must not keep a call open past its deadline, and the model list of one
+# call stops before the function's limit.
+def test_a_body_that_trickles_in_past_the_deadline_times_out():
+    import time
+
+    class Trickle:
+        def read1(self, n):
+            time.sleep(0.02)
+            return b" "
+    with pytest.raises(TimeoutError):
+        GeminiGM._read_until(Trickle(), time.monotonic() + 0.1, "m")
+
+
+def test_the_model_list_stops_when_the_time_budget_is_spent(http, monkeypatch):
+    monkeypatch.setattr(config, "CHAIN_TOTAL_SECONDS", 0)
+    monkeypatch.setattr(config, "GEMINI_LIGHT_MODELS", ["g-light", OR_L, OR_S])
+    script, seen = http
+    gm = GM()
+    with pytest.raises(GMUnavailable):
+        gm.call("s", "{}", tier="light")
+    assert not seen and gm.gemini_calls == 0 and "time budget" in gm.attempts[0]["error"]
