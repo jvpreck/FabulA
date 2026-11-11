@@ -75,7 +75,8 @@ def test_when_gemini_is_down_the_turn_close_is_answered_by_openrouter(http):
     assert gm.last["degraded"] is None and gm.last["provider"] == "openrouter"
     sent = seen[0]
     assert sent["body"]["model"] == "nvidia/nemotron-3-ultra-550b-a55b:free"
-    assert sent["body"]["messages"][0] == {"role": "system", "content": "sys"} and sent["body"]["reasoning"] == {"effort": "high"}
+    assert sent["body"]["messages"][0] == {"role": "system", "content": "sys"} and sent["body"]["reasoning"] == {"effort": "high", "exclude": True}
+    assert sent["body"]["max_tokens"] == config.OPENROUTER_MAX_TOKENS
     assert sent["body"]["response_format"] == {"type": "json_object"}
     assert sent["headers"]["Authorization"] == "Bearer test-key"
     assert gm.last_meta["provider"] == "openrouter" and gm.last_meta["tokens_in"] == 1200 and gm.last_meta["tokens_cached"] == 1000
@@ -182,3 +183,81 @@ def test_a_turn_close_records_the_model_provider_and_degradation_on_the_turn(wor
     assert out["handling"] == "resolved_turn" and any(m["mode"] == "resolve_turn" and m["degraded"] for m in out["ai_models"])
     t1 = store.get("game", gid)[0]["turns"][0]
     assert t1["gm_model"] == "g-light" and t1["gm_provider"] == "gemini" and t1["gm_degraded"] == "turn models unavailable"
+
+
+
+# ---- 2026-11-11 evening: models that cannot be used are skipped at once (never retried), the models tried are reported,
+# and a game listed in OPENROUTER_TEST_GAMES tries OpenRouter first.
+def test_an_empty_answer_skips_the_model_without_retrying_it(http, monkeypatch):
+    monkeypatch.setattr(config, "GEMINI_LIGHT_MODELS", ["g-light", OR_L, OR_S])
+    script, seen = http
+    script.extend([ok_body(""), ok_body()])
+    gm = GM()
+    gm.call("s", "{}", tier="light")
+    assert len(seen) == 2 and gm.last["model"] == OR_S, "the empty model is not asked twice"
+    assert "empty answer" in gm.attempts[-1]["error"]
+
+
+@pytest.mark.parametrize("code", [401, 404])
+def test_a_model_that_is_gone_is_tried_once_only(http, code, monkeypatch):
+    monkeypatch.setattr(config, "GEMINI_LIGHT_MODELS", ["g-light", OR_L, OR_S])
+    script, seen = http
+    script.extend([code, ok_body()])
+    gm = GM()
+    assert gm.call("s", "{}", tier="light") == '{"status": "ok"}'
+    assert len(seen) == 2 and gm.last["model"] == OR_S
+    assert [a["model"] for a in gm.attempts] == ["g-light", OR_L] and gm.last["failed_before"] == ["g-light", OR_L]
+
+
+def test_the_attempts_list_every_failed_model_when_all_fail(http):
+    script, seen = http
+    script.extend([404] * 5)
+    gm = GM()
+    with pytest.raises(GMUnavailable):
+        gm.call("s", "{}", tier="light")
+    assert {a["model"] for a in gm.attempts} == {"g-light", OR_L} and all(a["error"] for a in gm.attempts)
+
+
+def test_a_test_game_tries_openrouter_first(http, monkeypatch):
+    monkeypatch.setattr(config, "OPENROUTER_TEST_GAMES", {"g_test"})
+    script, seen = http
+    script.append(ok_body())
+    gm = GM()
+    gm.route_game = "g_test"
+    gm.call("s", "{}", tier="light")
+    assert gm.gemini_calls == 0 and gm.last["model"] == OR_L and gm.last_meta["routing"] == "openrouter_test_game"
+    gm.route_game = "g_other"
+    script.append(ok_body())
+    gm.call("s", "{}", tier="light")
+    assert gm.gemini_calls >= 1
+
+
+def test_an_engine_answer_names_the_models_that_failed_before(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    with_model(gm, OR_L, "openrouter")
+    orig = gm.call
+
+    def call(system, user, tier="light", **kw):
+        out = orig(system, user, tier)
+        gm.last["failed_before"] = ["g-light"]
+        return out
+    gm.call = call
+    out = eng.submit_action("p_jorge", gid, "action", "search the desk", cid)
+    assert out["ai_models"][0]["failed_before"] == ["g-light"]
+
+
+def test_an_outage_error_lists_the_models_tried(monkeypatch):
+    from server import tools
+    from server.engine import GeminiTrouble
+
+    class E:
+        class gm:
+            attempts = [{"model": "g-light", "tier": "light", "error": "ServerError: 503"}]
+    monkeypatch.setattr(tools, "_ENGINE", [E])
+
+    @tools._safe
+    def boom():
+        raise GeminiTrouble("down")
+    out = boom()
+    assert out["gemini_unavailable"] and out["models_tried"] == E.gm.attempts

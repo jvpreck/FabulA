@@ -13,6 +13,10 @@ class GMBusy(Exception):
     """The AI Master cannot be called right now because of a quota. Nothing was sent. Try again later."""
 
 
+class ModelSkip(Exception):
+    """A model that cannot be used right now (not free any more, removed, an empty answer): try the next model at once, never retry it."""
+
+
 class GMUnavailable(Exception):
     """Gemini did not answer after the automatic retries (overloaded, down, over its own quota or too slow). Nothing was applied.
     The player must be told that Gemini has problems and that nothing was lost."""
@@ -250,6 +254,8 @@ class GeminiGM:
         self._cache_off = {}  # model -> {"until", "note"}: the provider's free tier offers caching for some models only
         self._sleep = sleep or __import__("time").sleep
         self._openrouter_key = None  # tests set it; production reads OPENROUTER_API_KEY
+        self.route_game = None  # the game of the current call (set by the engine), for OPENROUTER_TEST_GAMES
+        self.attempts = []  # the models that failed during the current call: [{model, tier, error}]
         self._no_json_mode = set()  # OpenRouter models that refused response_format
 
     def _get(self):
@@ -286,7 +292,7 @@ class GeminiGM:
             if r != "ok":  # the account-wide free allowance; the wording lets the breaker leave the model alone for the right time
                 raise Exception(f"429 RESOURCE_EXHAUSTED: OpenRouter free-model quota {'PerDay' if r == 'day' else 'PerMinute'} used up")
         body = {"model": name, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                "reasoning": {"effort": self._OR_EFFORT.get(level, "medium")}}
+                "reasoning": {"effort": self._OR_EFFORT.get(level, "medium"), "exclude": True}, "max_tokens": config.OPENROUTER_MAX_TOKENS}
         if name not in self._no_json_mode:
             body["response_format"] = {"type": "json_object"}
         timeout = self._timeout_override and config.OPENROUTER_QUICK_TIMEOUT_SECONDS or config.OPENROUTER_TIMEOUT_SECONDS
@@ -304,20 +310,23 @@ class GeminiGM:
                     self._no_json_mode.add(name)  # this model has no JSON mode: ask without it (the prompt already demands JSON)
                     body.pop("response_format")
                     continue
-                if e.code in (401, 402, 403, 404):
-                    raise Exception(f"unavailable: OpenRouter {e.code} for {name}: {detail}") from None
+                if e.code in (400, 401, 402, 403, 404):
+                    raise ModelSkip(f"OpenRouter {e.code} for {name}: {detail}") from None
                 raise Exception(f"{e.code} OpenRouter {name}: {detail}") from None
             except (TimeoutError, OSError) as e:
                 raise Exception(f"timeout or connection error from OpenRouter {name}: {e}") from None
-        if data.get("error"):  # some upstream failures arrive with HTTP 200
+        if data.get("error"):  # some upstream failures arrive with HTTP 200: skip the model, do not retry it
             err = data["error"]
-            raise Exception(f"{err.get('code', 502)} OpenRouter {name}: {str(err.get('message', ''))[:200]} unavailable")
+            raise ModelSkip(f"OpenRouter {name} error {err.get('code', '?')}: {str(err.get('message', ''))[:200]}")
         try:
-            text = data["choices"][0]["message"].get("content") or ""
+            choice = data["choices"][0]
+            text = choice["message"].get("content") or ""
+            finish = choice.get("finish_reason") or choice.get("native_finish_reason")
         except (KeyError, IndexError, TypeError):
-            text = ""
+            text, finish = "", None
+        self._meta["finish_reason"] = finish
         if not text.strip():
-            raise Exception(f"502 OpenRouter {name}: empty answer")
+            raise ModelSkip(f"OpenRouter {name}: empty answer (finish_reason={finish})")
         u = data.get("usage") or {}
         self._meta.update(tokens_in=u.get("prompt_tokens", 0) or 0,
                           tokens_cached=(u.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0,
@@ -463,6 +472,8 @@ class GeminiGM:
 
     @staticmethod
     def _retryable(e):
+        if isinstance(e, ModelSkip):
+            return True
         m = f"{type(e).__name__} {e}".lower()
         return any(x in m for x in ("429", "resource_exhausted", "quota", "500", "502", "503", "504", "unavailable", "overloaded", "high demand", "deadline", "timeout", "timed out"))
 
@@ -470,6 +481,8 @@ class GeminiGM:
     def _transient(e):
         """A short-lived server-side failure (503 "high demand", 500, 502, 504) that is worth retrying quietly.
         Quota errors (429) and timeouts are NOT transient: a retry would not help or would outlive the function."""
+        if isinstance(e, ModelSkip):
+            return False
         code = getattr(e, "code", None) or getattr(e, "status_code", None)
         if code in (500, 502, 503, 504):
             return True
@@ -588,6 +601,7 @@ class GeminiGM:
             pass
 
     def _call(self, system: str, user: str, tier: str = "light", effort: str | None = None) -> str:
+        self.attempts = []
         effort = effort if effort in config.THINKING_LEVELS else None
         degraded = None
         if tier == "turn":
@@ -621,6 +635,9 @@ class GeminiGM:
     def _answer(self, chain, tier, level, system, user, seconds, degraded, final=False):
         """(answer, degraded note), or (None, note) when every model of the list failed in a way another model might not (`final`: raise)."""
         chain = list(chain)
+        if self.route_game and self.route_game in config.OPENROUTER_TEST_GAMES:  # live test: OpenRouter first for this game only
+            chain = [m for m in chain if m.startswith(config.OPENROUTER_PREFIX)] + [m for m in chain if not m.startswith(config.OPENROUTER_PREFIX)]
+            self._meta["routing"] = "openrouter_test_game"
         self._meta["thinking_level"] = level
         tokens = int((len(system) + len(user)) / config.CHARS_PER_TOKEN)
         over = {}
@@ -645,6 +662,7 @@ class GeminiGM:
                 if not self._retryable(e):
                     raise
                 last_error = e
+                self.attempts.append({"model": model, "tier": tier, "error": f"{type(e).__name__}: {str(e)[:160]}"})
                 if len(chain) > 1 or tier == "turn":  # a lone light model has nothing to be skipped for; the strong tier skips to the light models
                     self._trip_breaker(model, e, seconds=seconds)
                 continue
@@ -665,7 +683,8 @@ class GeminiGM:
                 fallback = f"{tier} model {chain[0]} unavailable, answered by {model}"
             provider = "openrouter" if model.startswith(config.OPENROUTER_PREFIX) else "gemini"
             self._meta["provider"] = provider
-            self.last = {"tier": tier, "model": model, "provider": provider, "degraded": degraded, "fallback": fallback}
+            self.last = {"tier": tier, "model": model, "provider": provider, "degraded": degraded, "fallback": fallback,
+                         "failed_before": [a["model"] for a in self.attempts]}
             return out, degraded
         note = (degraded + "; " if degraded else "") + f"{tier} models unavailable ({type(last_error).__name__})"
         if final:

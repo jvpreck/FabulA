@@ -22,13 +22,24 @@ def _next_step(msg):
     return "If you are unsure how to use the engine, call start_here, or get_guide('player-client-guide')."
 
 
+_ENGINE = []  # set by register(): the engine whose AI Master calls the errors describe
+
+
+def _models_tried():
+    """Every model that failed in the last AI Master call, with its error (2026-11-11: an outage answer used to name none)."""
+    try:
+        return list(getattr(_ENGINE[0].gm, "attempts", None) or []) if _ENGINE else []
+    except Exception:
+        return []
+
+
 def _safe(fn):
     @functools.wraps(fn)
     def wrapper(*a, **kw):
         try:
             return fn(*a, **kw)
         except GeminiTrouble as e:
-            return {"error": str(e), "gemini_unavailable": True, "retry_in_minutes": 5,
+            return {"error": str(e), "gemini_unavailable": True, "retry_in_minutes": 5, "models_tried": _models_tried(),
                     "next_step": "Tell the player plainly that there are problems with Gemini (the AI Master's model), that nothing was lost "
                                  "or changed, and to try the same thing again in a few minutes. Do not retry in a loop and do not invent a result."}
         except AIMasterBusy as e:
@@ -45,6 +56,7 @@ def _safe(fn):
 
 
 def register(mcp, engine: Engine):
+    _ENGINE[:] = [engine]
     @mcp.tool()
     @_safe
     def register_player(display_name: str = "", language: str = "en") -> dict:

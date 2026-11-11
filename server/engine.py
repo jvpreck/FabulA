@@ -347,6 +347,8 @@ class Engine:
             try:
                 try:
                     extra = {"effort": self._effort(mode, request)} if getattr(self.gm, "supports_effort", False) else {}
+                    if hasattr(self.gm, "route_game"):
+                        self.gm.route_game = game_id
                     resp = parse(self.gm.call(system, self._dumps(env), tier=tier, **extra))
                     self._note_answering_model(mode, request)
                 except GMBusy as e:
@@ -429,7 +431,7 @@ class Engine:
             return
         entry = {"mode": mode, "kind": (request or {}).get("kind") or mode, "model": last.get("model"), "provider": last.get("provider"),
                  "tier": last.get("tier")}
-        for k in ("degraded", "fallback"):
+        for k in ("degraded", "fallback", "failed_before"):
             if last.get(k):
                 entry[k] = last[k]
         self.__dict__.setdefault("_ai_models", []).append(entry)

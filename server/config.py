@@ -37,12 +37,19 @@ GEMINI_LIGHT_MODELS = _models("GEMINI_LIGHT_MODELS", ["GEMINI_MODEL_LIGHT", "GEM
 # OpenRouter (2026-11-11): a second provider, used only after every Gemini model of a tier has failed (a whole-provider outage such as the one of
 # 2026-11-10, 15:05 to about 04:45 UTC). Free models (`:free`) only: 20 requests a minute and 50 a day for the whole account (1,000 after a one-time
 # purchase of 10 credits), no token limit. Entries are named `openrouter:<model id>` in the chains. On when OPENROUTER_API_KEY is set
-# (OPENROUTER=off turns it off). Order agreed with the owner: strong Nemotron 3 Ultra then MiniMax M3.1 Flash; light MiniMax M3.1 Flash then Nemotron 3 Super.
+# (OPENROUTER=off turns it off). 2026-11-11 evening: the first choice failed in real use (MiniMax M3.1 Flash no longer free, Nemotron 3 Super removed,
+# Nemotron 3 Ultra empty answers); the lists follow OpenRouter's free list of 2026-11-09/11 (approved by the owner).
 OPENROUTER_PREFIX = "openrouter:"
 OPENROUTER_ENABLED = bool(os.environ.get("OPENROUTER_API_KEY")) and os.environ.get("OPENROUTER", "on").lower() not in ("off", "0", "false", "no")
 OPENROUTER_URL = os.environ.get("OPENROUTER_URL", "https://openrouter.ai/api/v1/chat/completions")
-OPENROUTER_STRONG_MODELS = _models("OPENROUTER_STRONG_MODELS", [], ["nvidia/nemotron-3-ultra-550b-a55b:free", "minimax/minimax-m3.1-flash:free"])
-OPENROUTER_LIGHT_MODELS = _models("OPENROUTER_LIGHT_MODELS", [], ["minimax/minimax-m3.1-flash:free", "nvidia/nemotron-3-super-120b-a12b:free"])
+OPENROUTER_STRONG_MODELS = _models("OPENROUTER_STRONG_MODELS", [], ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemma-4-31b-it:free",
+                                                                   "nvidia/nemotron-3.5-super-vl:free"])
+OPENROUTER_LIGHT_MODELS = _models("OPENROUTER_LIGHT_MODELS", [], ["nvidia/nemotron-3.5-lightning:free", "google/gemma-4-26b-a4b-it:free",
+                                                                 "nvidia/nemotron-3.5-super-vl:free"])
+# Output room for reasoning models: without it a free reasoning model can spend the provider's default on thinking and return no content.
+OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "24000"))
+# Games whose AI Master calls try OpenRouter before Gemini (comma-separated game ids), for a live test of the fallback without an outage.
+OPENROUTER_TEST_GAMES = {g.strip() for g in os.environ.get("OPENROUTER_TEST_GAMES", "").split(",") if g.strip()}
 OPENROUTER_TIMEOUT_SECONDS = int(os.environ.get("OPENROUTER_TIMEOUT_SECONDS", "110"))  # the last model of a chain; free reasoning models are slow
 OPENROUTER_QUICK_TIMEOUT_SECONDS = int(os.environ.get("OPENROUTER_QUICK_TIMEOUT_SECONDS", "75"))  # a model with another behind it
 if OPENROUTER_ENABLED:
