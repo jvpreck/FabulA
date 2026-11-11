@@ -170,6 +170,33 @@ class Usage:
                 continue
         return False
 
+    def record_request(self, level, expected, kind, game_id, declared=0):
+        """TLR-08-005: counts one player request by the level at which it was answered (not one AI Master call: see `record`).
+        `by_level_kind` has `<level>|<kind>`; `moved` counts requests answered at another level than the rules expected, and
+        `declared_wrong` those answered at another level than the client declared."""
+        from .db import Conflict
+        for _ in range(4):
+            now = self.now_fn()
+            day = self._day(now)
+            key = f"stats:{day}"
+            doc, ver = self.store.get("usage", key)
+            doc = doc or {"id": key, "day": day, "by": {}, "games": {}}
+            req = doc.setdefault("requests", {})
+            row = req.setdefault(f"{level}|{kind}", {"count": 0, "moved": 0, "declared_wrong": 0})
+            row["count"] += 1
+            if expected != level:
+                row["moved"] += 1
+            if declared and declared != level:
+                row["declared_wrong"] += 1
+            g = doc.setdefault("request_games", {}).setdefault(game_id or "-", {})
+            g[str(level)] = g.get(str(level), 0) + 1
+            try:
+                self.store.put("usage", key, doc, ver)
+                return True
+            except Conflict:
+                continue
+        return False
+
     def stats(self, day=None):
         """The day's call statistics (default today), with the share of input served from the provider's cache per level."""
         day = day or self._day(self.now_fn())
@@ -179,7 +206,8 @@ class Usage:
             row = dict(b)
             row["cached_share"] = round(b["tokens_cached"] / b["tokens_in"], 3) if b.get("tokens_in") else 0
             by[label] = row
-        return {"day": day, "by_level_tier_mode_kind": by, "by_game": doc["games"], "cache_note": doc.get("cache_note")}
+        return {"day": day, "by_level_tier_mode_kind": by, "by_game": doc["games"], "cache_note": doc.get("cache_note"),
+                "requests_by_level_kind": doc.get("requests", {}), "requests_by_game_level": doc.get("request_games", {})}
 
     def breakers(self):
         """The models that are being skipped now, with the time left and the reason."""

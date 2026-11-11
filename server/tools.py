@@ -170,7 +170,7 @@ def register(mcp, engine: Engine):
     @mcp.tool()
     @_safe
     def submit_action(player_key: str, game_id: str, kind: str, text: str = "", character_id: str = "",
-                      payload: dict | None = None, request_id: str = "") -> dict:
+                      payload: dict | None = None, request_id: str = "", expected_level: int = 0) -> dict:
         """Send anything the character does or the player decides. kind is one of: action (what the character wants to do, free text),
         say (speak to a character in the same place; payload {to, whisper}), setup_answers (payload {answers}),
         character_submission, character_confirm (payload {approved}), standing_orders (payload {standing_orders, safety}),
@@ -180,8 +180,10 @@ def register(mcp, engine: Engine):
         messages, others, settings; answered at once from the database without the AI Master), pause, resume (payload {choice}). Minor actions that affect only your character are resolved at once;
         the rest wait for the turn. Returns the results now available to you.
         request_id: a fresh unique id (for example a short random string) for each new request, sent again unchanged if you must retry after
-        a timeout or an error you did not see the answer to. The same request_id is processed once; the retry returns the first answer."""
-        return engine.submit_action(engine.authenticate(player_key), game_id, kind, text, character_id or None, payload, request_id)
+        a timeout or an error you did not see the answer to. The same request_id is processed once; the retry returns the first answer.
+        expected_level (optional, 1 to 4): the level you expect, 1 you answer alone, 2 the engine from its data, 3 the AI Master at once, 4 the turn close.
+        The server decides the level by fixed rules; every answer says its `level` and, when it differs from what was expected, a `level_reason`."""
+        return engine.submit_action(engine.authenticate(player_key), game_id, kind, text, character_id or None, payload, request_id, expected_level)
 
     @mcp.tool()
     @_safe

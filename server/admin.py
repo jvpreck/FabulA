@@ -207,7 +207,8 @@ def _cmd_gm_usage(engine, args):
     from .gm import Usage
     u = Usage(engine.store, engine.now_fn)
     return {"usage": u.today(), "calls": u.stats(args.get("day")), "skipped_models": u.breakers(), "models": u.models_today(), "note": "Counts are per provider day (Pacific time). `calls` is the AI Master "
-            "call log of the day: by level|tier|mode|request kind, and by game, with tokens, cached share, retries and latency."}
+            "call log of the day: by level|tier|mode|request kind, and by game, with tokens, cached share, retries and latency. `requests_by_level_kind` counts "
+            "the player's requests by the level at which each was answered (`moved`: another level than the rules expected, `declared_wrong`: another level than the client declared)."}
 
 
 def _cmd_generate_images(engine, args):

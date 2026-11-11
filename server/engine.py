@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from . import apply as ap
-from . import config, files, level2, prompt, redact, tasks
+from . import config, files, level2, levels, prompt, redact, tasks
 from .db import Conflict, Workspace, state_key
 from .dice import make_dice
 from .gm import GMBusy, GMError, GMUnavailable, parse
@@ -1722,11 +1722,11 @@ class Engine:
         return {"accepted": True, "task_id": task_id, "character_id": c["id"], "validation": v, **out}
 
     # ---- submit_action
-    def submit_action(self, player_id, game_id, kind, text="", character_id=None, payload=None, request_id=""):
+    def submit_action(self, player_id, game_id, kind, text="", character_id=None, payload=None, request_id="", expected_level=0):
         """TLR-06-010: with a `request_id`, sending the same request again (a client retry after a timeout, a double click) has the effect of
         one request: the second call returns the first call's result (or says the first is still running) and changes nothing."""
         if not request_id:
-            return self._submit_action_once(player_id, game_id, kind, text, character_id, payload)
+            return self._submit_action_once(player_id, game_id, kind, text, character_id, payload, expected_level)
         if not isinstance(request_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", request_id):
             raise EngineError("request_id must be 1 to 64 letters, digits or _ . : -")
         key = f"{game_id}:{request_id}"
@@ -1734,7 +1734,7 @@ class Engine:
         if seen is not None:
             return {**seen, "duplicate_request": request_id}
         try:
-            out = self._submit_action_once(player_id, game_id, kind, text, character_id, payload)
+            out = self._submit_action_once(player_id, game_id, kind, text, character_id, payload, expected_level)
         except BaseException:
             self._release_request(player_id, key)
             raise
@@ -1794,8 +1794,22 @@ class Engine:
             except Conflict:
                 continue
 
-    def _submit_action_once(self, player_id, game_id, kind, text="", character_id=None, payload=None):
+    def _submit_action_once(self, player_id, game_id, kind, text="", character_id=None, payload=None, expected_level=0):
+        """TLR-01-016: every answer reports the level at which it was really answered (and, when it differs from what the rules or the client
+        expected, why: TLR-03-007, 03-008). TLR-08-005: the level of every request is counted."""
         kind = kind if kind in PLAYER_KINDS else "free_query"
+        out = self._submit_action_inner(player_id, game_id, kind, text, character_id, payload)
+        try:
+            expected = levels.expected_level(kind, payload)
+            final = levels.stamp(out, kind, payload, expected_level)
+            usage = getattr(self.gm, "usage", None)
+            if usage is not None:
+                usage.record_request(final, expected, kind, game_id, declared=expected_level)
+        except Exception:  # bookkeeping never blocks play
+            pass
+        return out
+
+    def _submit_action_inner(self, player_id, game_id, kind, text="", character_id=None, payload=None):
         payload = dict(payload or {})
         ws = self._ws()
         player = self._player(ws, player_id)
