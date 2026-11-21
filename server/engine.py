@@ -2322,4 +2322,12 @@ class Engine:
             images = self.process_images(budget_seconds=config.FUNCTION_BUDGET_SECONDS - (time.monotonic() - started))
         except Exception as e:  # pictures never block the game
             images = {"error": str(e)[:200]}
-        return {"checked": len(ids), "results": out, "images": images}
+        result = {"checked": len(ids), "results": out, "images": images}
+        try:  # model probe (server/probe.py): off unless PROBE_RUN is set; uses only the time this run has left
+            from . import probe
+            p = probe.run_one(self.store, 285 - (time.monotonic() - started), iso(self.now()))
+            if p:
+                result["probe"] = p
+        except Exception as e:  # never blocks the game
+            result["probe"] = {"error": str(e)[:200]}
+        return result
