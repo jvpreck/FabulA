@@ -75,7 +75,7 @@ def test_when_gemini_is_down_the_turn_close_is_answered_by_openrouter(http):
     assert gm.last["degraded"] is None and gm.last["provider"] == "openrouter"
     sent = seen[0]
     assert sent["body"]["model"] == "nvidia/nemotron-3-ultra-550b-a55b:free"
-    assert sent["body"]["messages"][0] == {"role": "system", "content": "sys"} and sent["body"]["reasoning"] == {"effort": "high", "exclude": True}
+    assert sent["body"]["messages"][0] == {"role": "system", "content": "sys"} and sent["body"]["reasoning"] == {"effort": "high", "exclude": False} and sent["body"]["stream"] is True
     assert sent["body"]["max_tokens"] == config.OPENROUTER_MAX_TOKENS
     assert sent["body"]["response_format"] == {"type": "json_object"}
     assert sent["headers"]["Authorization"] == "Bearer test-key"
@@ -133,13 +133,12 @@ def test_the_free_allowance_is_counted_for_the_whole_account(http, monkeypatch):
     assert Usage(store).today()["openrouter"]["used_today"] == 2
 
 
-def test_the_quick_and_final_timeouts(http):
+def test_the_connection_waits_at_most_the_start_limit(http):
     script, seen = http
     script.extend([503, 503, 503, 503, ok_body()])
-    monkeypatch_chain = [OR_S, OR_L]
-    config.GEMINI_STRONG_MODELS[:] = monkeypatch_chain  # only OpenRouter models: the first is quick, the last gets the full timeout
+    config.GEMINI_STRONG_MODELS[:] = [OR_S, OR_L]
     GM().call("s", "{}", tier="turn")
-    assert seen[0]["timeout"] == config.OPENROUTER_QUICK_TIMEOUT_SECONDS and seen[-1]["timeout"] == config.OPENROUTER_TIMEOUT_SECONDS
+    assert all(s["timeout"] <= config.OPENROUTER_START_SECONDS for s in seen)
 
 
 # ---- 2026-11-11: every engine answer names the model that answered each AI Master call made for it
@@ -188,14 +187,25 @@ def test_a_turn_close_records_the_model_provider_and_degradation_on_the_turn(wor
 
 # ---- 2026-11-11 evening: models that cannot be used are skipped at once (never retried), the models tried are reported,
 # and a game listed in OPENROUTER_TEST_GAMES tries OpenRouter first.
-def test_an_empty_answer_skips_the_model_without_retrying_it(http, monkeypatch):
+def test_an_empty_answer_skips_the_model_for_a_turn_close(http, monkeypatch):
+    monkeypatch.setattr(config, "GEMINI_STRONG_MODELS", ["g-strong", OR_L, OR_S])
+    script, seen = http
+    script.extend([ok_body(""), ok_body()])
+    gm = GM()
+    gm.call("s", "{}", tier="turn")
+    assert len(seen) == 2 and gm.last["model"] == OR_S, "a turn close never retries the same model at a lower effort"
+    assert "empty answer" in gm.attempts[-1]["error"]
+
+
+def test_a_simple_request_without_an_answer_is_tried_again_at_effort_low(http, monkeypatch):
     monkeypatch.setattr(config, "GEMINI_LIGHT_MODELS", ["g-light", OR_L, OR_S])
     script, seen = http
     script.extend([ok_body(""), ok_body()])
     gm = GM()
     gm.call("s", "{}", tier="light")
-    assert len(seen) == 2 and gm.last["model"] == OR_S, "the empty model is not asked twice"
-    assert "empty answer" in gm.attempts[-1]["error"]
+    assert [s["body"]["model"] for s in seen] == [OR_L[len(config.OPENROUTER_PREFIX):]] * 2
+    assert seen[0]["body"]["reasoning"]["effort"] == "medium" and seen[1]["body"]["reasoning"]["effort"] == "low"
+    assert gm.last["model"] == OR_L and "medium -> low" in gm.last_meta["effort_retry"]
 
 
 @pytest.mark.parametrize("code", [401, 404])
@@ -285,3 +295,38 @@ def test_the_model_list_stops_when_the_time_budget_is_spent(http, monkeypatch):
     with pytest.raises(GMUnavailable):
         gm.call("s", "{}", tier="light")
     assert not seen and gm.gemini_calls == 0 and "time budget" in gm.attempts[0]["error"]
+
+
+
+# ---- 2026-11-21: streamed answers
+class Stream:
+    def __init__(self, parts, pause=0):
+        self.parts, self.pause = list(parts), pause
+
+    def read1(self, n):
+        import time
+        time.sleep(self.pause)
+        return self.parts.pop(0) if self.parts else b""
+
+
+def test_a_streamed_answer_is_assembled_and_keepalives_are_ignored():
+    import time
+    parts = [b": OPENROUTER PROCESSING\n\n", b'data: {"choices":[{"delta":{"reasoning":"hm"}}]}\n\n',
+             b'data: {"choices":[{"delta":{"content":"{\\"a\\""}}]}\n', b'data: {"choices":[{"delta":{"content":": 1}"},"finish_reason":"stop"}],'
+             b'"usage":{"prompt_tokens":9,"completion_tokens":3}}\n\ndata: [DONE]\n\n']
+    text, finish, usage, err, started = GeminiGM._read_stream(Stream(parts), time.monotonic() + 5, time.monotonic() + 5, "m")
+    assert text == '{"a": 1}' and finish == "stop" and usage["prompt_tokens"] == 9 and err is None and started is not None
+
+
+def test_a_stream_that_only_sends_keepalives_stops_at_the_start_deadline():
+    import time
+    with pytest.raises(TimeoutError) as e:
+        GeminiGM._read_stream(Stream([b": OPENROUTER PROCESSING\n\n"] * 100, pause=0.02), time.monotonic() + 5, time.monotonic() + 0.1, "m")
+    assert "not started" in str(e.value)
+
+
+def test_an_error_inside_the_stream_is_reported():
+    import time
+    parts = [b'data: {"error":{"message":"upstream overloaded","code":502}}\n\n']
+    text, finish, usage, err, started = GeminiGM._read_stream(Stream(parts), time.monotonic() + 5, time.monotonic() + 5, "m")
+    assert text == "" and "overloaded" in err

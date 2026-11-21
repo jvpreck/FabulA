@@ -27,6 +27,9 @@ COMMANDS = {
     "reject_ruleset": "ruleset_id [reason]: keeps it but never makes it available",
     "delete_ruleset": "ruleset_id [force]: removes an imported ruleset; refused while adventures or games use it unless force is true",
     "purge_tasks": "no arguments: removes expired, finished and failed work packages",
+    "probe_schedule": "times (list of UTC ISO start times, e.g. [\"2026-11-23T15:00Z\"]) [replace]: schedules model probe runs (docs/model_probe.md); "
+                      "without times shows the schedule",
+    "probe_status": "[run]: the model probe runs and their results (one run with `run`)",
 }
 
 
@@ -209,6 +212,36 @@ def _cmd_gm_usage(engine, args):
     return {"usage": u.today(), "calls": u.stats(args.get("day")), "skipped_models": u.breakers(), "models": u.models_today(), "note": "Counts are per provider day (Pacific time). `calls` is the AI Master "
             "call log of the day: by level|tier|mode|request kind, and by game, with tokens, cached share, retries and latency. `requests_by_level_kind` counts "
             "the player's requests by the level at which each was answered (`moved`: another level than the rules expected, `declared_wrong`: another level than the client declared)."}
+
+
+def _cmd_probe_schedule(engine, args):
+    """docs/model_probe.md: adds (or with replace=true sets) probe start times. The scheduler starts a run at each time."""
+    from . import probe
+    times = args.get("times")
+    if times:
+        if isinstance(times, str):
+            times = [times]
+        for x in times:
+            probe._parse(str(x))  # refuses a malformed time
+        doc, ver = engine.store.get("usage", probe.SCHEDULE_KEY)
+        doc = doc or {"id": probe.SCHEDULE_KEY, "times": []}
+        doc["times"] = sorted(set(([] if args.get("replace") else doc["times"]) + [str(x) for x in times]))
+        engine.store.put("usage", probe.SCHEDULE_KEY, doc, ver)
+    return {"schedule": probe.scheduled_times(engine.store), "env_PROBE_RUN": __import__("os").environ.get("PROBE_RUN") or None,
+            "note": "Each run tests every model of both chains, one per scheduler run (every 5 minutes), within 3 hours of its start."}
+
+
+def _cmd_probe_status(engine, args):
+    """docs/model_probe.md: the probe runs kept in gm_usage (records probe:<run>)."""
+    runs = []
+    for doc, _ in engine.store.find("usage"):
+        i = str(doc.get("id", ""))
+        if i.startswith("probe:") and i != "probe:schedule" and (not args.get("run") or i == "probe:" + str(args["run"])):
+            runs.append(doc)
+    runs.sort(key=lambda d: d.get("started") or "")
+    return {"runs": runs if args.get("run") else [{"run": d.get("run"), "started": d.get("started"), "left": d.get("queue"),
+            "results": [{k: r.get(k) for k in ("model", "answered", "total_s", "first_content_s", "json_ok", "error")} for r in d.get("results", [])]}
+            for d in runs]}
 
 
 def _cmd_generate_images(engine, args):

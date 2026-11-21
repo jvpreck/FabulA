@@ -42,10 +42,12 @@ GEMINI_LIGHT_MODELS = _models("GEMINI_LIGHT_MODELS", ["GEMINI_MODEL_LIGHT", "GEM
 OPENROUTER_PREFIX = "openrouter:"
 OPENROUTER_ENABLED = bool(os.environ.get("OPENROUTER_API_KEY")) and os.environ.get("OPENROUTER", "on").lower() not in ("off", "0", "false", "no")
 OPENROUTER_URL = os.environ.get("OPENROUTER_URL", "https://openrouter.ai/api/v1/chat/completions")
-OPENROUTER_STRONG_MODELS = _models("OPENROUTER_STRONG_MODELS", [], ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemma-4-31b-it:free",
-                                                                   "nvidia/nemotron-3.5-super-vl:free"])
-OPENROUTER_LIGHT_MODELS = _models("OPENROUTER_LIGHT_MODELS", [], ["nvidia/nemotron-3.5-lightning:free", "google/gemma-4-26b-a4b-it:free",
+# 2026-11-21 (owner, after the model probe): Gemma removed (Google serves it, so it is rate-limited exactly when Gemini is); Nemotron 3 Ultra
+# first in both lists (15 s in the probe, and the only OpenRouter answers during Test 2).
+OPENROUTER_STRONG_MODELS = _models("OPENROUTER_STRONG_MODELS", [], ["nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3.5-super-vl:free"])
+OPENROUTER_LIGHT_MODELS = _models("OPENROUTER_LIGHT_MODELS", [], ["nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3.5-lightning:free",
                                                                  "nvidia/nemotron-3.5-super-vl:free"])
+OPENROUTER_START_SECONDS = int(os.environ.get("OPENROUTER_START_SECONDS", "60"))  # a streamed answer must start (reasoning or text) within this
 # Output room for reasoning models: without it a free reasoning model can spend the provider's default on thinking and return no content.
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "24000"))
 # Games whose AI Master calls try OpenRouter before Gemini (comma-separated game ids), for a live test of the fallback without an outage.

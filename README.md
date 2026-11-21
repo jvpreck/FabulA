@@ -154,6 +154,12 @@ the model alone until midnight Pacific for every instance and counts the day as 
 Only this server's calls are counted, so the figures can only be lower than the provider's (my own probing is not counted), and the 429 answer corrects them.
 `gm_usage` (admin) shows `models`: what was sent against each limit today. When the limits change, update the table from the page.
 
+## Model probe
+
+`server/probe.py` measures from production how every Gemini and OpenRouter model answers a real-size request (answered or not, time, time to
+first token, valid JSON). Runs are started by the host (`probe_schedule`, or the `PROBE_RUN` env) and results read with `probe_status`.
+See [docs/model_probe.md](docs/model_probe.md).
+
 ## Illustrations
 
 Pictures are drawn during the player's own call (a character confirmation, an action or fetching results), up to `INLINE_IMAGE_SECONDS` (default 40), so they are listed in the same result; the result carries `picture_seconds` to show what that added. The server also queues, by itself, a picture of each place a character reaches for the first time and a portrait of each NPC met for the first time (`AUTO_PICTURES_PER_RESPONSE`, default 3), writing the prompt with a light model call from player-safe facts only.

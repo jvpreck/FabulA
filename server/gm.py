@@ -255,6 +255,7 @@ class GeminiGM:
         self._sleep = sleep or __import__("time").sleep
         self._openrouter_key = None  # tests set it; production reads OPENROUTER_API_KEY
         self._chain_deadline = None
+        self._tier = None
         self.route_game = None  # the game of the current call (set by the engine), for OPENROUTER_TEST_GAMES
         self.attempts = []  # the models that failed during the current call: [{model, tier, error}]
         self._no_json_mode = set()  # OpenRouter models that refused response_format
@@ -298,7 +299,25 @@ class GeminiGM:
             chunks.append(chunk)
 
     def _generate_openrouter(self, model, level, system, user):
+        """One OpenRouter answer, streamed (2026-11-21): a model that has not started (no reasoning and no text) within
+        OPENROUTER_START_SECONDS is given up at once; one that has started may use the rest of its time. For a simple request (the light
+        tier) whose first try got no answer, a second try at reasoning effort `low` follows if time allows (owner's choice: never for a turn
+        close, whose answer must be the strongest)."""
+        import time
+        first = self._OR_EFFORT.get(level, "medium")
+        try:
+            return self._openrouter_once(model, first, system, user)
+        except (TimeoutError, ModelSkip) as e:
+            no_answer = isinstance(e, TimeoutError) or "empty answer" in str(e)
+            left = (self._chain_deadline - time.monotonic()) if self._chain_deadline else config.OPENROUTER_TIMEOUT_SECONDS
+            if not (no_answer and self._tier == "light" and first != "low" and left >= config.CHAIN_MIN_SECONDS):
+                raise
+            self._meta["effort_retry"] = f"{first} -> low after: {str(e)[:100]}"
+            return self._openrouter_once(model, "low", system, user)
+
+    def _openrouter_once(self, model, effort, system, user):
         import os
+        import time
         import urllib.error
         import urllib.request
         name = model[len(config.OPENROUTER_PREFIX):]
@@ -307,21 +326,23 @@ class GeminiGM:
             r = self.usage.reserve("openrouter")
             if r != "ok":  # the account-wide free allowance; the wording lets the breaker leave the model alone for the right time
                 raise Exception(f"429 RESOURCE_EXHAUSTED: OpenRouter free-model quota {'PerDay' if r == 'day' else 'PerMinute'} used up")
-        body = {"model": name, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                "reasoning": {"effort": self._OR_EFFORT.get(level, "medium"), "exclude": True}, "max_tokens": config.OPENROUTER_MAX_TOKENS}
+        body = {"model": name, "stream": True, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                "reasoning": {"effort": effort, "exclude": False}, "max_tokens": config.OPENROUTER_MAX_TOKENS}
         if name not in self._no_json_mode:
             body["response_format"] = {"type": "json_object"}
         timeout = self._timeout_override and config.OPENROUTER_QUICK_TIMEOUT_SECONDS or config.OPENROUTER_TIMEOUT_SECONDS
         if self._chain_deadline:
-            timeout = max(1, min(timeout, self._chain_deadline - __import__("time").monotonic()))
-        deadline = __import__("time").monotonic() + timeout
+            timeout = max(1, min(timeout, self._chain_deadline - time.monotonic()))
+        t0 = time.monotonic()
+        deadline = t0 + timeout
+        start_deadline = t0 + min(timeout, config.OPENROUTER_START_SECONDS)
         while True:
             req = urllib.request.Request(config.OPENROUTER_URL, data=json.dumps(body).encode("utf-8"), method="POST", headers={
                 "Authorization": "Bearer " + (self._openrouter_key or os.environ.get("OPENROUTER_API_KEY", "")),
                 "Content-Type": "application/json", "HTTP-Referer": "https://fabula-rpg.vercel.app", "X-Title": "FabulA"})
             try:
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    data = json.loads(self._read_until(resp, deadline, name).decode("utf-8"))
+                with urllib.request.urlopen(req, timeout=min(timeout, config.OPENROUTER_START_SECONDS)) as resp:
+                    text, finish, usage, err, started = self._read_stream(resp, deadline, start_deadline, name)
                 break
             except urllib.error.HTTPError as e:
                 detail = e.read().decode("utf-8", "replace")[:300]
@@ -332,26 +353,78 @@ class GeminiGM:
                 if e.code in (400, 401, 402, 403, 404):
                     raise ModelSkip(f"OpenRouter {e.code} for {name}: {detail}") from None
                 raise Exception(f"{e.code} OpenRouter {name}: {detail}") from None
-            except (TimeoutError, OSError) as e:
+            except TimeoutError:
+                raise
+            except OSError as e:
                 raise Exception(f"timeout or connection error from OpenRouter {name}: {e}") from None
-        if data.get("error"):  # some upstream failures arrive with HTTP 200: skip the model, do not retry it
-            err = data["error"]
-            raise ModelSkip(f"OpenRouter {name} error {err.get('code', '?')}: {str(err.get('message', ''))[:200]}")
-        try:
-            choice = data["choices"][0]
-            text = choice["message"].get("content") or ""
-            finish = choice.get("finish_reason") or choice.get("native_finish_reason")
-        except (KeyError, IndexError, TypeError):
-            text, finish = "", None
-        self._meta["finish_reason"] = finish
+        self._meta.update(finish_reason=finish, effort=effort, started_after_s=started)
+        if err:  # some upstream failures arrive inside the answer: skip the model, do not retry it
+            raise ModelSkip(f"OpenRouter {name} error: {str(err)[:200]}")
         if not text.strip():
             raise ModelSkip(f"OpenRouter {name}: empty answer (finish_reason={finish})")
-        u = data.get("usage") or {}
+        u = usage or {}
         self._meta.update(tokens_in=u.get("prompt_tokens", 0) or 0,
                           tokens_cached=(u.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0,
                           tokens_out=u.get("completion_tokens", 0) or 0,
                           tokens_thought=(u.get("completion_tokens_details") or {}).get("reasoning_tokens", 0) or 0)
         return text
+
+    @staticmethod
+    def _read_stream(resp, deadline, start_deadline, name):
+        """Reads a streamed (server-sent events) or plain JSON answer. Returns (text, finish_reason, usage, error, seconds to first token).
+        TimeoutError when nothing has started by `start_deadline` or the answer is not complete by `deadline`."""
+        import time
+        t0 = time.monotonic()
+        read = getattr(resp, "read1", None) or resp.read
+        buf, plain, text, finish, usage, err, started = b"", None, [], None, None, None, None
+        while True:
+            now = time.monotonic()
+            if started is None and now > start_deadline:
+                raise TimeoutError(f"OpenRouter {name}: the model had not started answering after {int(now - t0)} s (timed out)")
+            if now > deadline:
+                raise TimeoutError(f"OpenRouter {name}: no complete answer before the deadline (timed out)")
+            chunk = read(65536)
+            if not chunk:
+                break
+            buf += chunk
+            if plain is None and buf.strip():
+                plain = buf.lstrip()[:1] == b"{"  # a plain JSON body (no streaming)
+            if plain:
+                started = started if started is not None else round(time.monotonic() - t0, 1)
+                continue
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                line = line.strip()
+                if not line.startswith(b"data:"):
+                    continue  # blank lines and ": OPENROUTER PROCESSING" keep-alives
+                data = line[5:].strip()
+                if data == b"[DONE]":
+                    continue
+                try:
+                    ev = json.loads(data)
+                except ValueError:
+                    continue
+                if ev.get("error"):
+                    err = ev["error"].get("message") if isinstance(ev["error"], dict) else ev["error"]
+                for ch in ev.get("choices") or []:
+                    d = ch.get("delta") or ch.get("message") or {}
+                    if (d.get("content") or d.get("reasoning")) and started is None:
+                        started = round(time.monotonic() - t0, 1)
+                    if d.get("content"):
+                        text.append(d["content"])
+                    finish = ch.get("finish_reason") or finish
+                usage = ev.get("usage") or usage
+        if plain:
+            data = json.loads(buf.decode("utf-8"))
+            if data.get("error"):
+                e = data["error"]
+                return "", None, None, f"{e.get('code', '?')}: {e.get('message', '')}" if isinstance(e, dict) else str(e), started
+            try:
+                ch = data["choices"][0]
+                return (ch["message"].get("content") or ""), ch.get("finish_reason"), data.get("usage"), None, started
+            except (KeyError, IndexError, TypeError):
+                return "", None, data.get("usage"), None, started
+        return "".join(text), finish, usage, err, started
 
     def _generate(self, model, level, system, user):
         if model.startswith(config.OPENROUTER_PREFIX):
@@ -655,6 +728,7 @@ class GeminiGM:
     def _answer(self, chain, tier, level, system, user, seconds, degraded, final=False):
         """(answer, degraded note), or (None, note) when every model of the list failed in a way another model might not (`final`: raise)."""
         chain = list(chain)
+        self._tier = tier
         if self.route_game and self.route_game in config.OPENROUTER_TEST_GAMES:  # live test: OpenRouter first for this game only
             chain = [m for m in chain if m.startswith(config.OPENROUTER_PREFIX)] + [m for m in chain if not m.startswith(config.OPENROUTER_PREFIX)]
             self._meta["routing"] = "openrouter_test_game"

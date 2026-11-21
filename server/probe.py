@@ -129,9 +129,46 @@ def _gemini(model, system, user, wait):
     return out
 
 
-def run_one(store, seconds_left, now_iso):
-    """Tests the next model of the run named by PROBE_RUN, if any, within `seconds_left`. Returns a short summary or None."""
+SCHEDULE_KEY = "probe:schedule"
+WINDOW_HOURS = 3  # a scheduled run that has not finished within this many hours of its start is left unfinished
+
+
+def _parse(ts):
+    from datetime import datetime, timezone
+    return datetime.fromisoformat(ts.strip().replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
+def scheduled_times(store):
+    """Start times (UTC ISO) from the env PROBE_SCHEDULE (comma-separated) and the gm_usage record probe:schedule (host command
+    probe_schedule), without duplicates."""
+    times = [x for x in os.environ.get("PROBE_SCHEDULE", "").split(",") if x.strip()]
+    doc, _ = store.get("usage", SCHEDULE_KEY)
+    times += list((doc or {}).get("times") or [])
+    out = []
+    for x in times:
+        try:
+            out.append(_parse(x).strftime("%Y-%m-%dT%H:%MZ"))
+        except ValueError:
+            continue
+    return sorted(set(out))
+
+
+def active_run(store, now_iso):
+    """The run to work on now: PROBE_RUN if set, else the scheduled start that has passed and is less than WINDOW_HOURS old."""
     run = os.environ.get("PROBE_RUN", "").strip()
+    if run:
+        return run
+    now = _parse(now_iso)
+    for t in reversed(scheduled_times(store)):
+        start = _parse(t)
+        if start <= now and (now - start).total_seconds() < WINDOW_HOURS * 3600:
+            return "sched-" + t.replace(":", "").replace("-", "")
+    return None
+
+
+def run_one(store, seconds_left, now_iso):
+    """Tests the next model of the active run (see active_run), if any, within `seconds_left`. Returns a short summary or None."""
+    run = active_run(store, now_iso)
     if not run or seconds_left < config.PROBE_MIN_SECONDS:
         return None
     key = f"probe:{run}"

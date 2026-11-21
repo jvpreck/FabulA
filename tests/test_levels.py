@@ -114,3 +114,18 @@ def test_a_request_that_moved_level_is_counted_as_moved(world):
     ready(eng, "p_b", gid, c["p_b"])          # expected level 2, answered at level 4
     req = usage.stats()["requests_by_level_kind"]
     assert req["4|ready"]["count"] == 1 and req["4|ready"]["moved"] == 1 and req["2|ready"]["count"] == 1
+
+
+# ---- 2026-11-21: the level 2 topic ai_status keeps the player informed about the models and their waiting requests
+def test_ai_status_lists_models_and_waiting_actions(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    gm.usage = Usage(store, lambda: clock["t"])
+    gm.call = down(GMUnavailable("503"))
+    eng.submit_action("p_jorge", gid, "action", "I will visit Tom.", cid)
+    out = eng.submit_action("p_jorge", gid, "free_query", "", cid, {"topic": "ai_status"})
+    a = out["answer"]
+    assert out["level"] == 2 and out["presentation"] == "plain" and "ai_models" not in out
+    assert a["models"] and {m["state"] for m in a["models"]} <= {"available", "skipped"}
+    assert [w["text"] for w in a["this_game"]["your_queued_actions"]] == ["I will visit Tom."]
+    assert a["this_game"]["your_queued_actions"][0]["waiting_because"]

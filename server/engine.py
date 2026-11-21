@@ -665,10 +665,14 @@ class Engine:
             n = (g.get("clock") or {}).get("turn")
             ent = next((t for t in g.get("turns", []) if t["n"] == n), None)
             if ent and ent.get("gm_trouble"):
-                out.append({"game_id": gid, "kind": "gemini_unavailable", "since": ent["gm_trouble"]["since"],
-                            "message": "Tell the player: the AI Master's model (Google Gemini) is having problems, so the current turn has not been "
-                                       "resolved yet. Nothing is lost. The server keeps trying every few minutes and the result will arrive "
-                                       "in a later get_results call."})
+                tr = ent["gm_trouble"]
+                out.append({"game_id": gid, "kind": "gemini_unavailable", "since": tr["since"], "last_attempt": tr.get("last"),
+                            "last_reason": str(tr.get("reason") or "")[:160], "checked_at": iso(self.now()),
+                            "turn_closes": (g.get("clock") or {}).get("turn_closes"),
+                            "message": "Tell the player: the AI Master (Google Gemini, or the OpenRouter fallback) could not resolve the current turn at the last attempt (`last_attempt`, "
+                                       "`last_reason`). Nothing is lost. It is tried again automatically at the latest when the turn closes "
+                                       "(`turn_closes`); the player can ask for it sooner by sending `ready` false then true. For the current "
+                                       "state of every model, ask the level 2 topic `ai_status`."})
         return out
 
     # ---------------------------------------------------------- illustrations
@@ -2052,7 +2056,10 @@ class Engine:
 
     # ---- TLR-01-009, level 2: a free query with a known `topic` is answered from the database. No AI Master call, no quota.
     def _answer_level2(self, ws, game, player_id, c, topic):
-        data = level2.answer(topic, game, c, ws.load_game_characters(game["id"]), self.now(), self._span_blocks(game))
+        if topic == "ai_status":
+            data = self._ai_status(ws, game, c)
+        else:
+            data = level2.answer(topic, game, c, ws.load_game_characters(game["id"]), self.now(), self._span_blocks(game))
         usage = getattr(self.gm, "usage", None)
         if usage is not None:
             try:
@@ -2066,6 +2073,45 @@ class Engine:
                     "presentation `narrate`: this is about the game world, so narrate it in the voice of the story (at the player's narration_verbosity), as bold blockquote "
                     "paragraphs, not as a list. presentation `plain`: this is game mechanics, so state it plainly outside the narration. "
                     "Add nothing that is not here; for anything else send a free_query without a topic."})
+
+    # ---- 2026-11-21 (owner): keep the player informed about the AI Master's models and their own waiting requests. Level 2 topic `ai_status`.
+    def _ai_status(self, ws, game, c):
+        usage = getattr(self.gm, "usage", None)
+        skipped = {}
+        today = {}
+        if usage is not None:
+            try:
+                skipped = {b["model"]: b for b in usage.breakers()}
+                today = usage.today()
+            except Exception:
+                pass
+
+        def row(m, tier):
+            b = skipped.get(m)
+            r = {"model": m, "provider": "openrouter" if m.startswith(config.OPENROUTER_PREFIX) else "gemini", "tier": tier,
+                 "state": "skipped" if b else "available"}
+            if b:
+                r.update(retry_in_seconds=b["seconds_left"], reason=str(b.get("reason") or "")[:160])
+            return r
+        models = [row(m, "strong") for m in config.GEMINI_STRONG_MODELS] + [row(m, "light") for m in config.GEMINI_LIGHT_MODELS]
+        n = (game.get("clock") or {}).get("turn")
+        ent = next((t for t in game.get("turns", []) if t.get("n") == n), None) or {}
+        trouble = ent.get("gm_trouble")
+        sa = ws.get("submit_action", f"{game['id']}:{n}") or {}
+        waiting = [{"id": a.get("id"), "submitted_at": a.get("submitted_at"), "text": str(a.get("raw_text") or "")[:120],
+                    "waiting_because": a.get("deferred_because")}
+                   for a in (sa.get("actions") or {}).get(c["id"], []) if a.get("status") == "queued"]
+        return {"checked_at": iso(self.now()),
+                "summary": ("all strong models are being skipped" if all(m["state"] == "skipped" for m in models if m["tier"] == "strong") else
+                            "at least one strong model is available"),
+                "models": models,
+                "used_today": {k: {"used": v.get("used_today"), "limit": v.get("daily_limit")} for k, v in today.items()},
+                "this_game": {"turn": n, "turn_closes": (game.get("clock") or {}).get("turn_closes"),
+                              "turn_waiting_for_ai_since": trouble.get("since") if trouble else None,
+                              "last_ai_failure": trouble.get("reason") if trouble else None,
+                              "your_queued_actions": waiting},
+                "note": "Tell the player plainly which models answer now, what is being skipped and why, and what of theirs is waiting. "
+                        "A waiting turn is retried by the server; the player can also send `ready` false then true to ask for it again."}
 
     # ---- TLR-03-009 / 07-009 / 07-004: when the AI Master cannot answer (Gemini down, or over its quota), an `action` is not refused: it is saved
     # as a level 4 action, unparsed, and the AI Master reads the player's own words at the turn close.

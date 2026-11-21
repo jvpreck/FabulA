@@ -18,6 +18,7 @@ TOPICS = {
     "messages": "messages sent to or by the character and speech heard",
     "others": "public status of the other characters in the game",
     "settings": "standing orders and safety settings",
+    "ai_status": "the AI Master's models now: which answer and which are being skipped and why, today's use, and this game's waiting turn or actions",
 }
 
 
@@ -30,7 +31,8 @@ def _seconds_left(game, now):
 
 # TLR-07-011: what the client does with the answer. The world is narrated; the mechanics are stated plainly, outside the narration.
 PRESENTATION = {"inventory": "narrate", "location": "narrate", "relationships": "narrate", "knowledge": "narrate", "messages": "narrate", "others": "narrate",
-                "conditions": "narrate", "time": "plain", "sheet": "plain", "threads": "plain", "settings": "plain"}
+                "conditions": "narrate", "time": "plain", "sheet": "plain", "threads": "plain", "settings": "plain",
+                "ai_status": "plain"}
 
 
 def _ready(game, c):
