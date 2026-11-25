@@ -20,10 +20,30 @@ Code: `server/probe.py`. Tests: `tests/test_probe.py`. Added 2026-11-21 at the o
 - Results are written to the `gm_usage` table, record `probe:<run>`: `queue` (models still to test), `results` (one entry per model).
 - It never changes a game and never blocks one: the scheduler resolves due turns first, and a failure of the probe is only reported.
 
+### Request kinds (2026-11-25)
+
+Env `PROBE_KINDS`, comma-separated, default `simple`. Each kind is a separate pass over its models, so `simple,action,turn_close` queues
+about 3 times as many requests (about 20 with the current lists, about 100 minutes of scheduler runs).
+
+| Kind | Request | Models |
+|---|---|---|
+| `simple` | the play instructions and a small `free_query` (above) | both lists |
+| `action` | a real level 3 action ("I search the desk in the office for letters or notes...", from the recorded scenario `minor_action_uses_server_dice_in_order`) built by the engine from the game in env `PROBE_GAME`, exactly as in play: system prompt with that game's adventure and profile, the compact envelope, the effort for an action | light list |
+| `turn_close` | a real level 4 turn close of `PROBE_GAME`, with one queued action added in memory ("I ask the person in charge here about what happened...", from `major_action_is_queued_for_the_turn`), turn profile and turn effort | strong list |
+
+`PROBE_GAME` must be an active game with a living character; the probe only reads it (nothing is applied or saved). Without it the
+realistic kinds are recorded as `skipped`. Use a throwaway game (e.g. the probe player's game), not a game someone is playing: its secrets
+go to the free endpoints like any other request. The results carry `kind`, `envelope_chars`, `system_chars`, `effort`, `game` and `turn`.
+
+The realistic kinds are what to run when the free models change (new models, removed models, new limits): a model that answers the small
+request can still fail on a 60,000-token turn close.
+
 ## Cost
 
-Each model tested uses one real request: one of the 20 daily requests of a strong Gemini model, one of the light model's, one of the 50 free
-OpenRouter requests (shared by the whole account). A full run is about 5 Gemini and 3 to 5 OpenRouter requests.
+Each model tested uses one real request, and since 2026-11-25 it is **counted in the same daily guards as play** (`Usage.reserve`: tier
+`turn` for a strong Gemini model or any turn close, `light` for a light Gemini model, `openrouter` for OpenRouter, 45 a day for the whole
+account). When a guard is used up the request is not sent and the result says `skipped`, so a probe can never take the last strong requests a
+turn close needs. A `simple` run is about 4 Gemini and 3 OpenRouter requests; all three kinds about 12 Gemini and 8 OpenRouter.
 
 ## How to start a run
 
@@ -60,5 +80,19 @@ and say how many samples each number rests on: one run is one sample.
 | Run | When (UTC) | Notes |
 |---|---|---|
 | `2026-11-21a` | Sat 2026-11-21 06:55 to 07:40 | Quiet time. Gemini 3.6 Flash 28 s, 3.5 Flash-Lite 7 s, 3.1 Flash-Lite 3.5 s; 3.5 and 3.8 Flash 503. OpenRouter Nemotron 3 Ultra 15 s, 3.5 Super VL 41 s, 3.5 Lightning 46 s (5k to 8k reasoning tokens); Gemma 4 31B and 26B 429 (rate-limited upstream, removed from the lists afterwards). All answers were valid JSON. |
-| `sched-20261123T1500Z` | Mon 2026-11-23 15:00 | Scheduled: busy weekday afternoon. |
-| `sched-20261124T0200Z` | Tue 2026-11-24 02:00 (03:00 Madrid) | Scheduled: the hour at which turns of whole days close. |
+| `sched-20261123T1500Z` | Mon 2026-11-23 15:00 | Busy weekday afternoon. Gemini 3.6 Flash 11 s, 3.5 Flash 13 s; 3.8 Flash, 3.5 Flash-Lite, 3.1 Flash-Lite 503 within 2 s. OpenRouter Ultra 30 s, Super VL 18 s, Lightning 46 s. |
+| `sched-20261124T0200Z` | Tue 2026-11-24 02:00 (03:00 Madrid) | Turn-close hour. Gemini 3.6 Flash 40 s, 3.5 Flash 38 s, 3.5 Flash-Lite 10 s, 3.1 Flash-Lite 3.6 s; 3.8 Flash 503. OpenRouter Ultra 12 s, Super VL 70 s, Lightning 11 s. |
+
+Decisions after these three runs (owner, 2026-11-25): gemini-3.8-flash removed (0 of 3, and down on 2026-11-09); gemini-3.6-flash removed
+from the light list (simple requests must not spend the strong quota; if both light Gemini models and OpenRouter fail, the request waits);
+long waits kept (quality over speed); OpenRouter writing time raised to 120 s with another model behind and 180 s for the last; Gemini 503
+retried after 6, 12 and 18 s; failed early turn closes retried by the scheduler; turn closes spread over 02:00 to 06:00 Madrid; realistic
+kinds added. Every Gemini failure seen in the probe was a fast 503 refusal and every OpenRouter start came within 2.6 s, so the OpenRouter
+timeouts in play were long outputs on larger requests: that is what the realistic kinds measure.
+
+## Draft, not implemented: recurring probe runs
+
+Proposal kept as a draft (owner, 2026-11-25). A host command `probe_recurring` with `{"kinds": [...], "every_days": 7, "hours_utc": [15, 1]}`
+would add the next start times to `probe:schedule` by itself after each run, so a weekly sample at a busy hour and at the turn-close hour
+builds up without anyone remembering. It would need a cap on the share of the day's guards a run may use (for example at most a third of
+the strong and OpenRouter requests) and a short summary per run in `probe_status` to compare runs over time.

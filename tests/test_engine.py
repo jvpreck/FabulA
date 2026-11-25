@@ -766,10 +766,22 @@ def test_game_creation_takes_the_closing_hour(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng)
     g, _ = store.get("game", gid)
-    assert g["settings"]["turn_close_hour"] == 3 and g["settings"]["turn_timezone"] == "Europe/Madrid"
+    # 2026-11-25: the first game gets the first slot of the night window (02:00 to 06:00 Madrid)
+    assert (g["settings"]["turn_close_hour"], g["settings"].get("turn_close_minute", 0)) == (2, 0) and g["settings"]["turn_timezone"] == "Europe/Madrid"
     assert g["clock"]["turn_closes"].endswith("Z")
     closes = datetime.fromisoformat(g["clock"]["turn_closes"].replace("Z", "+00:00"))
-    assert closes.hour == 2 and closes.minute == 0   # 03:00 Madrid in winter
+    assert closes.hour == 1 and closes.minute == 0   # 02:00 Madrid in winter
+
+
+def test_new_games_are_spread_over_the_night_slots(world):
+    eng, store, gm, clock = world
+    start_solo(eng)
+    out = new_game(eng, "p_ana")
+    g, _ = store.get("game", out["game_id"])
+    assert (g["settings"]["turn_close_hour"], g["settings"]["turn_close_minute"]) == (2, 15)
+    s = {"turn_interval_hours": 24, "turn_close_hour": 4, "turn_close_minute": 45, "turn_timezone": "Europe/Madrid"}
+    t0 = datetime(2026, 7, 1, 10, tzinfo=timezone.utc)
+    assert Engine._turn_closes(t0, s) == datetime(2026, 7, 2, 2, 45, tzinfo=timezone.utc)  # 04:45 Madrid in summer
 
 
 def test_a_player_can_choose_the_closing_hour_and_bad_values_are_rejected(world):

@@ -558,10 +558,63 @@ class Engine:
         except Exception:
             return opens + timedelta(hours=hours)
         earliest = (opens + timedelta(hours=hours - 12)).astimezone(tz)
-        closes = earliest.replace(hour=hour, minute=0, second=0, microsecond=0)
+        minute = s.get("turn_close_minute") or 0
+        minute = minute if isinstance(minute, int) and 0 <= minute <= 59 else 0
+        closes = earliest.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if closes < earliest:
             closes += timedelta(days=1)  # wall-clock arithmetic: stays at the same local hour across daylight saving changes
         return closes.astimezone(timezone.utc)
+
+    def _suggest_close_slot(self, ws):
+        """(hour, minute) for a new game: the least used slot of TURN_CLOSE_WINDOW (Madrid time, steps of TURN_CLOSE_SLOT_MINUTES) among the
+        active games that close at a fixed hour, earliest first on a tie (2026-11-25, owner: spread the turn passes of party games over the night,
+        so they do not all reach the AI Master in the same minute)."""
+        start, end = config.TURN_CLOSE_WINDOW
+        step = max(1, config.TURN_CLOSE_SLOT_MINUTES)
+        slots = [(h, m) for h in range(start, end) for m in range(0, 60, step)]
+        used = {s_: 0 for s_ in slots}
+        try:
+            for g in ws.find("game", phase="active") + ws.find("game", phase="characters"):
+                st = g.get("settings") or {}
+                key = (st.get("turn_close_hour"), st.get("turn_close_minute") or 0)
+                if key in used:
+                    used[key] += 1
+        except Exception:
+            pass
+        return min(slots, key=lambda s_: (used[s_], s_)) if slots else (config.TURN_CLOSE_HOUR, 0)
+
+    # 2026-11-25 (owner): a turn close that failed because the AI Master did not answer is retried by the scheduler (gm_usage record
+    # retry:turns), first after TURN_RETRY_FIRST_MINUTES, then with doubling pauses up to TURN_RETRY_MAX_MINUTES, not only at the deadline.
+    RETRY_KEY = "retry:turns"
+
+    def _retry_mark(self, game_id, n):
+        try:
+            doc, ver = self.store.get("usage", self.RETRY_KEY)
+            doc = doc or {"id": self.RETRY_KEY, "games": {}}
+            prev = doc["games"].get(game_id) or {}
+            k = prev.get("tries", 0) if prev.get("turn") == n else 0
+            wait = min(config.TURN_RETRY_FIRST_MINUTES * (2 ** k), config.TURN_RETRY_MAX_MINUTES)
+            doc["games"][game_id] = {"turn": n, "tries": k + 1, "next": iso(self.now() + timedelta(minutes=wait)), "last": iso(self.now())}
+            self.store.put("usage", self.RETRY_KEY, doc, ver)
+        except Exception:
+            pass
+
+    def _retry_clear(self, game_id):
+        try:
+            doc, ver = self.store.get("usage", self.RETRY_KEY)
+            if doc and game_id in doc.get("games", {}):
+                doc["games"].pop(game_id)
+                self.store.put("usage", self.RETRY_KEY, doc, ver)
+        except Exception:
+            pass
+
+    def _retry_due(self):
+        try:
+            doc, _ = self.store.get("usage", self.RETRY_KEY)
+        except Exception:
+            return []
+        now = iso(self.now())
+        return [gid for gid, r in ((doc or {}).get("games") or {}).items() if (r.get("next") or "") <= now]
 
     def _open_turn(self, ws, game, n):
         s = game["settings"]
@@ -667,11 +720,12 @@ class Engine:
             if ent and ent.get("gm_trouble"):
                 tr = ent["gm_trouble"]
                 out.append({"game_id": gid, "kind": "gemini_unavailable", "since": tr["since"], "last_attempt": tr.get("last"),
+                            "next_retry": tr.get("next_retry"),
                             "last_reason": str(tr.get("reason") or "")[:160], "checked_at": iso(self.now()),
                             "turn_closes": (g.get("clock") or {}).get("turn_closes"),
                             "message": "Tell the player: the AI Master (Google Gemini, or the OpenRouter fallback) could not resolve the current turn at the last attempt (`last_attempt`, "
-                                       "`last_reason`). Nothing is lost. It is tried again automatically at the latest when the turn closes "
-                                       "(`turn_closes`); the player can ask for it sooner by sending `ready` false then true. For the current "
+                                       "`last_reason`). Nothing is lost. It is tried again automatically at `next_retry` "
+                                       "(the pauses grow up to an hour) and at the latest when the turn closes (`turn_closes`); the player can ask for it sooner by sending `ready` false then true. For the current "
                                        "state of every model, ask the level 2 topic `ai_status`."})
         return out
 
@@ -1401,10 +1455,12 @@ class Engine:
             raise EngineError(f"the adventure needs ruleset {adv.get('ruleset_id')}, which this server does not have")
         rec = adv.get("recommended") or {}
         s = {"turn_interval_hours": rec.get("turn_interval_hours", 24), "turn_span": rec.get("turn_span", "day"),
-             "turn_close_hour": rec.get("turn_close_hour", config.TURN_CLOSE_HOUR), "turn_timezone": config.TURN_TIMEZONE,
+             "turn_close_hour": rec.get("turn_close_hour", config.TURN_CLOSE_HOUR), "turn_close_minute": 0, "turn_timezone": config.TURN_TIMEZONE,
              "early_close": None, "pvp": "soft", "visibility": "private", "illustrations": "off", "image_style": None, "lethality": rec.get("lethality", "high"),
              "tone_preset": None, "modules": [], "players_expected": 1, "setup_deadline": iso(self.now() + timedelta(days=3)),
              "crisis": {"active": False, "turn_span": "beat", "turn_interval_hours": 24}}
+        if "turn_close_hour" not in (settings or {}) and "turn_close_hour" not in rec:
+            s["turn_close_hour"], s["turn_close_minute"] = self._suggest_close_slot(ws)  # spread over the night window
         for k, v in (settings or {}).items():
             if k in s:
                 s[k] = v
@@ -1548,11 +1604,13 @@ class Engine:
             if adv.get("ruleset_id") not in self.rulesets():
                 raise EngineError(f"the adventure needs ruleset {adv.get('ruleset_id')}, which this server does not have")
             rec = adv.get("recommended") or {}
+            slot = self._suggest_close_slot(ws) if (params.get("settings") or {}).get("turn_close_hour") is None and "turn_close_hour" not in rec else None
             defaults = {"title": params.get("title") or adv.get("title"), "language": params.get("language") or "en",
                         "lethality": (params.get("settings") or {}).get("lethality") or rec.get("lethality", "high"),
                         "turn_interval_hours": (params.get("settings") or {}).get("turn_interval_hours") or rec.get("turn_interval_hours", 24),
                         "turn_span": (params.get("settings") or {}).get("turn_span") or rec.get("turn_span", "day"),
-                        "turn_close_hour": (lambda v: rec.get("turn_close_hour", config.TURN_CLOSE_HOUR) if v is None else v)((params.get("settings") or {}).get("turn_close_hour")),
+                        "turn_close_hour": slot[0] if slot else (lambda v: rec.get("turn_close_hour", config.TURN_CLOSE_HOUR) if v is None else v)((params.get("settings") or {}).get("turn_close_hour")),
+                        "turn_close_minute": slot[1] if slot else (params.get("settings") or {}).get("turn_close_minute", 0),
                         "turn_timezone": (params.get("settings") or {}).get("turn_timezone") or config.TURN_TIMEZONE,
                         "pvp": (params.get("settings") or {}).get("pvp") or "soft", "visibility": "private", "illustrations": "on" if self._images_available() else "off"}
             ctx = tasks.game_context(adv, defaults, self._images_available())
@@ -1641,6 +1699,8 @@ class Engine:
             s = {k: package[k] for k in ("lethality", "turn_span", "turn_interval_hours", "pvp", "visibility", "illustrations", "image_style") if package.get(k)}
             if package.get("turn_close_hour") is not None:  # 0 (midnight) and -1 (no fixed hour) are real values
                 s["turn_close_hour"] = package["turn_close_hour"]
+            if isinstance(package.get("turn_close_minute"), int) and not isinstance(package.get("turn_close_minute"), bool):
+                s["turn_close_minute"] = package["turn_close_minute"]
             if package.get("turn_timezone"):
                 s["turn_timezone"] = package["turn_timezone"].strip()
             if isinstance(package.get("players_expected"), int) and not isinstance(package.get("players_expected"), bool):
@@ -2108,6 +2168,7 @@ class Engine:
                 "used_today": {k: {"used": v.get("used_today"), "limit": v.get("daily_limit")} for k, v in today.items()},
                 "this_game": {"turn": n, "turn_closes": (game.get("clock") or {}).get("turn_closes"),
                               "turn_waiting_for_ai_since": trouble.get("since") if trouble else None,
+                              "next_automatic_retry": trouble.get("next_retry") if trouble else None,
                               "last_ai_failure": trouble.get("reason") if trouble else None,
                               "your_queued_actions": waiting},
                 "note": "Tell the player plainly which models answer now, what is being skipped and why, and what of theirs is waiting. "
@@ -2309,6 +2370,10 @@ class Engine:
                 if isinstance(e, GeminiTrouble):  # the players are told on their next get_results
                     prev = e2.get("gm_trouble") or {}
                     e2["gm_trouble"] = {"since": prev.get("since") or iso(self.now()), "last": iso(self.now()), "reason": e.reason[:200]}
+                    self._retry_mark(game_id, n)
+                    nxt = ((self.store.get("usage", self.RETRY_KEY)[0] or {}).get("games") or {}).get(game_id, {}).get("next")
+                    if nxt:
+                        e2["gm_trouble"]["next_retry"] = nxt
                 ws2.touch("game", game_id)
                 ws2.commit()
             if isinstance(e, (EngineError, Conflict)):
@@ -2329,6 +2394,7 @@ class Engine:
             ent["status"] = "resolved"
             ent["resolved_at"] = iso(self.now())
             ent.pop("gm_trouble", None)
+            self._retry_clear(game_id)
             ent.pop("resolving_since", None)
             ent["span"] = ent.get("span")
             for c in by_id.values():
@@ -2355,6 +2421,7 @@ class Engine:
     def resolve_due(self):
         started = time.monotonic()
         ids = self.store.due_games(iso(self.now()))
+        ids = list(ids) + [g for g in self._retry_due() if g not in ids]  # failed early closes, retried before their deadline
         out = []
         for gid in ids:
             if time.monotonic() - started > config.FUNCTION_BUDGET_SECONDS - config.TURN_RESERVE_SECONDS:

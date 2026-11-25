@@ -115,7 +115,8 @@ def game_context(adventure, defaults, images_available=False):
                           "language": adventure.get("language")},
             "ruleset_id": adventure.get("ruleset_id"), "defaults": defaults,
             "options": {"lethality": ["low", "moderate", "high"], "turn_span": ["day", "block"],
-                        "turn_close_hour": "0 to 23 = the hour of the day (in turn_timezone) at which a turn of a whole number of days closes; -1 = exactly one interval after it opens", "pvp": ["none", "soft", "full"], "visibility": ["private", "open"],
+                        "turn_close_hour": "0 to 23 = the hour of the day (in turn_timezone) at which a turn of a whole number of days closes; -1 = exactly one interval after it opens",
+                        "turn_close_minute": "0 to 59, the minute of that hour; the default hour and minute are a slot of the night chosen so that games do not all close at once", "pvp": ["none", "soft", "full"], "visibility": ["private", "open"],
                         "illustrations": ["off", "on"] if images_available else ["off"]},
             "explanations": {"lethality": lethality_help()}}
 
@@ -241,6 +242,9 @@ def validate_game(p, adventure, images_available=False):
     h = p.get("turn_interval_hours", 24)
     if not isinstance(h, int) or not (1 <= h <= 168):
         problems.append("turn_interval_hours must be 1 to 168")
+    cm = p.get("turn_close_minute")
+    if cm is not None and (isinstance(cm, bool) or not isinstance(cm, int) or not (0 <= cm <= 59)):
+        problems.append("turn_close_minute must be a minute from 0 to 59")
     ch = p.get("turn_close_hour")
     if ch is not None and (isinstance(ch, bool) or not isinstance(ch, int) or not (-1 <= ch <= 23)):
         problems.append("turn_close_hour must be -1 (no fixed hour) or an hour from 0 to 23")

@@ -32,8 +32,11 @@ def _models(env, legacy, default):
 # is used; a model that times out, answers a 5xx or is over its quota is skipped for a while and the next one answers.
 # STRONG is for closing a turn (little traffic, quality first, 20 requests a day per model on the free tier); LIGHT is for what a player does
 # between turns (many requests, speed and a high daily allowance first).
-GEMINI_STRONG_MODELS = _models("GEMINI_STRONG_MODELS", ["GEMINI_MODEL_TURN"], ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.8-flash"])
-GEMINI_LIGHT_MODELS = _models("GEMINI_LIGHT_MODELS", ["GEMINI_MODEL_LIGHT", "GEMINI_MODEL"], ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"])
+# 2026-11-25 (owner, after three probe runs, docs/model_probe.md): gemini-3.8-flash answered 0 of 3 (and failed on 2026-11-09) and is removed;
+# gemini-3.6-flash is removed from the light list so that simple requests never spend the strong daily quota that turn passes need (if the
+# light models and OpenRouter all fail, the request waits instead).
+GEMINI_STRONG_MODELS = _models("GEMINI_STRONG_MODELS", ["GEMINI_MODEL_TURN"], ["gemini-3.6-flash", "gemini-3.5-flash"])
+GEMINI_LIGHT_MODELS = _models("GEMINI_LIGHT_MODELS", ["GEMINI_MODEL_LIGHT", "GEMINI_MODEL"], ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"])
 # OpenRouter (2026-11-11): a second provider, used only after every Gemini model of a tier has failed (a whole-provider outage such as the one of
 # 2026-11-10, 15:05 to about 04:45 UTC). Free models (`:free`) only: 20 requests a minute and 50 a day for the whole account (1,000 after a one-time
 # purchase of 10 credits), no token limit. Entries are named `openrouter:<model id>` in the chains. On when OPENROUTER_API_KEY is set
@@ -52,8 +55,8 @@ OPENROUTER_START_SECONDS = int(os.environ.get("OPENROUTER_START_SECONDS", "60"))
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "24000"))
 # Games whose AI Master calls try OpenRouter before Gemini (comma-separated game ids), for a live test of the fallback without an outage.
 OPENROUTER_TEST_GAMES = {g.strip() for g in os.environ.get("OPENROUTER_TEST_GAMES", "").split(",") if g.strip()}
-OPENROUTER_TIMEOUT_SECONDS = int(os.environ.get("OPENROUTER_TIMEOUT_SECONDS", "110"))  # the last model of a chain; free reasoning models are slow
-OPENROUTER_QUICK_TIMEOUT_SECONDS = int(os.environ.get("OPENROUTER_QUICK_TIMEOUT_SECONDS", "75"))  # a model with another behind it
+OPENROUTER_TIMEOUT_SECONDS = int(os.environ.get("OPENROUTER_TIMEOUT_SECONDS", "180"))  # the last model of a chain; free reasoning models are slow
+OPENROUTER_QUICK_TIMEOUT_SECONDS = int(os.environ.get("OPENROUTER_QUICK_TIMEOUT_SECONDS", "120"))  # 2026-11-25 (owner): quality over speed  # a model with another behind it
 if OPENROUTER_ENABLED:
     GEMINI_STRONG_MODELS = GEMINI_STRONG_MODELS + [OPENROUTER_PREFIX + m for m in OPENROUTER_STRONG_MODELS]
     GEMINI_LIGHT_MODELS = GEMINI_LIGHT_MODELS + [OPENROUTER_PREFIX + m for m in OPENROUTER_LIGHT_MODELS]
@@ -105,12 +108,19 @@ STYLE_MIN, STYLE_MAX = 40, 700
 IMAGE_TIMEOUT_SECONDS = 25
 FUNCTION_BUDGET_SECONDS = int(os.environ.get("FUNCTION_BUDGET_SECONDS", "240"))  # Vercel maxDuration is 300 (see vercel.json)
 TURN_RESERVE_SECONDS = int(os.environ.get("TURN_RESERVE_SECONDS", "110"))
-PROBE_MIN_SECONDS = int(os.environ.get("PROBE_MIN_SECONDS", "150"))  # server/probe.py: a model is probed only with at least this much time left  # no new turn is started with less than this left
+PROBE_MIN_SECONDS = int(os.environ.get("PROBE_MIN_SECONDS", "150"))
+# 2026-11-25 (owner): a turn close that failed because the AI Master did not answer is tried again by the scheduler, not only at the deadline:
+# after TURN_RETRY_FIRST_MINUTES, then doubling up to TURN_RETRY_MAX_MINUTES (each try counts against the strong daily guard).
+TURN_RETRY_FIRST_MINUTES = int(os.environ.get("TURN_RETRY_FIRST_MINUTES", "5"))
+TURN_RETRY_MAX_MINUTES = int(os.environ.get("TURN_RETRY_MAX_MINUTES", "60"))
+# 2026-11-25 (owner): turns of whole days close in a window of the night (Madrid time); each new game is offered the least used slot.
+TURN_CLOSE_WINDOW = (int(os.environ.get("TURN_CLOSE_WINDOW_START_HOUR", "2")), int(os.environ.get("TURN_CLOSE_WINDOW_END_HOUR", "6")))
+TURN_CLOSE_SLOT_MINUTES = int(os.environ.get("TURN_CLOSE_SLOT_MINUTES", "15"))  # server/probe.py: a model is probed only with at least this much time left  # no new turn is started with less than this left
 GEMINI_STRUCTURED_OUTPUT = os.environ.get("GEMINI_STRUCTURED_OUTPUT", "off").lower() in ("on", "1", "true", "yes")  # the provider enforces the response schema (server/schema.py)
 GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "100"))  # one model call must never outlive the function
 GEMINI_RETRIES = int(os.environ.get("GEMINI_RETRIES", "3"))  # extra attempts after a transient Gemini error (503 "high demand", 500, 502, 504)
-GEMINI_RETRY_BASE_SECONDS = float(os.environ.get("GEMINI_RETRY_BASE_SECONDS", "2"))  # waits are base, 3x base, 9x base, with jitter
-GEMINI_RETRY_BUDGET_SECONDS = float(os.environ.get("GEMINI_RETRY_BUDGET_SECONDS", "40"))  # total time spent waiting between attempts for one request
+GEMINI_RETRY_BASE_SECONDS = float(os.environ.get("GEMINI_RETRY_BASE_SECONDS", "6"))  # 2026-11-25: 503 "high demand" refusals are short spikes; wait long enough  # waits are base, 2x base, 3x base, with jitter
+GEMINI_RETRY_BUDGET_SECONDS = float(os.environ.get("GEMINI_RETRY_BUDGET_SECONDS", "50"))  # total time spent waiting between attempts for one request
 GEMINI_RETRY_MAX_CALL_SECONDS = float(os.environ.get("GEMINI_RETRY_MAX_CALL_SECONDS", "20"))  # a call that already ran longer than this (a slow 504 gateway timeout) is not retried
 INLINE_IMAGE_SECONDS = int(os.environ.get("INLINE_IMAGE_SECONDS", "40"))  # pictures drawn during a player call, so they do not wait for the scheduler
 AUTO_PICTURES_PER_RESPONSE = int(os.environ.get("AUTO_PICTURES_PER_RESPONSE", "3"))  # automatic place and NPC pictures written by the server per response
@@ -176,7 +186,7 @@ STRONG_BREAKER_SECONDS = int(os.environ.get("STRONG_BREAKER_SECONDS", "900"))  #
 
 # A model that has another behind it in its list gives up fast: one quick retry, a short wait, a shorter timeout (the last one gets the full ones).
 CHAIN_QUICK_RETRIES = int(os.environ.get("CHAIN_QUICK_RETRIES", "1"))
-CHAIN_QUICK_BUDGET_SECONDS = float(os.environ.get("CHAIN_QUICK_BUDGET_SECONDS", "8"))
+CHAIN_QUICK_BUDGET_SECONDS = float(os.environ.get("CHAIN_QUICK_BUDGET_SECONDS", "15"))  # room for one retry after a 6 to 7.5 s pause
 CHAIN_TIMEOUT_SECONDS = int(os.environ.get("CHAIN_TIMEOUT_SECONDS", "45"))
 # The whole list of models of one AI Master call must end well inside the function's 300 s (2026-11-11: a hung OpenRouter call used it all).
 CHAIN_TOTAL_SECONDS = int(os.environ.get("CHAIN_TOTAL_SECONDS", "230"))

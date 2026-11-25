@@ -186,7 +186,7 @@ def test_a_503_high_demand_is_retried_quietly_with_backoff():
     g = FlakyGemini(usage(store, clock), [busy, busy])
     assert g.call("s", "u") == "{}"
     assert len(g.calls) == 3 and len(g.pauses) == 2
-    assert 2 <= g.pauses[0] < 3 and 6 <= g.pauses[1] < 7.6      # base, then 3x base, with a little jitter
+    assert 6 <= g.pauses[0] < 7.6 and 12 <= g.pauses[1] < 15.1     # base (about 6 s), then 2x base, with a little jitter (2026-11-25)
     assert g.last["degraded"] is None
 
 
@@ -213,12 +213,12 @@ def test_quota_errors_timeouts_and_bugs_are_not_retried():
 
 
 def test_the_retry_wait_has_a_total_budget(monkeypatch):
-    monkeypatch.setattr(config, "GEMINI_RETRY_BUDGET_SECONDS", 3)
+    monkeypatch.setattr(config, "GEMINI_RETRY_BUDGET_SECONDS", 9)
     store, clock = MemoryStore(), Clock()
     g = FlakyGemini(usage(store, clock), [RuntimeError("503 UNAVAILABLE")] * 5)
     with pytest.raises(GMUnavailable):
         g.call("s", "u")
-    assert len(g.calls) == 2 and len(g.pauses) == 1           # the 6 s second wait would exceed the budget
+    assert len(g.calls) == 2 and len(g.pauses) == 1           # the 12 s second wait would exceed the budget
 
 
 def test_an_error_with_a_status_code_attribute_counts():

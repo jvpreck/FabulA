@@ -135,16 +135,19 @@ def register(mcp, engine: Engine):
     @_safe
     def create_game(player_key: str, adventure_id: str, title: str = "", language: str = "", display_name: str = "",
                     lethality: str = "", turn_interval_hours: int = 0, turn_span: str = "", pvp: str = "", visibility: str = "",
-                    turn_close_hour: int = -2, turn_timezone: str = "") -> dict:
+                    turn_close_hour: int = -2, turn_timezone: str = "", turn_close_minute: int = -1) -> dict:
         """Start a new game run from an adventure. Returns a work package that collects the settings (lethality low, moderate or high; the default is high,
         turn interval, the hour of the day a turn closes, pvp, language, visibility private or open) with the player; then send the result with submit_package.
-        turn_close_hour is 0 to 23 (hour of the day in turn_timezone, default Europe/Madrid, at which a turn of whole days closes; the default is 3, in the middle of
-        the night) or -1 for no fixed hour. Optional arguments prefill defaults."""
+        turn_close_hour is 0 to 23 (hour of the day in turn_timezone, default Europe/Madrid, at which a turn of whole days closes; by default the server
+        proposes a slot between 02:00 and 06:00 so that games do not all close at once) or -1 for no fixed hour; turn_close_minute 0 to 59 is the minute
+        of that hour. Optional arguments prefill defaults."""
         s = {k: v for k, v in {"lethality": lethality, "turn_interval_hours": turn_interval_hours or None,
                                "turn_span": turn_span, "pvp": pvp, "visibility": visibility,
                                "turn_timezone": turn_timezone}.items() if v}
         if turn_close_hour != -2:
             s["turn_close_hour"] = turn_close_hour
+        if 0 <= turn_close_minute <= 59:
+            s["turn_close_minute"] = turn_close_minute
         return engine.create_game(engine.authenticate(player_key), adventure_id, title or None, language or None, s, display_name or None)
 
     @mcp.tool()
