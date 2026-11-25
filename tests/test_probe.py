@@ -13,8 +13,8 @@ def test_one_model_per_run_until_the_queue_is_empty(monkeypatch):
     monkeypatch.setenv("PROBE_MODELS", "g-a,openrouter:x/y:free")
     calls = []
     monkeypatch.setattr(probe, "_system", lambda: "SYS")
-    monkeypatch.setattr(probe, "_gemini", lambda m, s, u, w: calls.append(m) or {"answered": True, "total_s": 3.0})
-    monkeypatch.setattr(probe, "_openrouter", lambda m, s, u, w: calls.append(m) or {"answered": False, "total_s": 270.0, "error": "slow"})
+    monkeypatch.setattr(probe, "_gemini", lambda m, s, u, w, e="medium": calls.append(m) or {"answered": True, "total_s": 3.0})
+    monkeypatch.setattr(probe, "_openrouter", lambda m, s, u, w, e="medium": calls.append(m) or {"answered": False, "total_s": 270.0, "error": "slow"})
     store = MemoryStore()
     assert probe.run_one(store, 280, "2026-11-23T15:00:00Z")["model"] == "g-a"
     assert probe.run_one(store, 280, "2026-11-23T15:05:00Z")["model"] == "openrouter:x/y:free"
