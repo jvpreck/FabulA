@@ -568,12 +568,12 @@ class Engine:
     def _suggest_close_slot(self, ws):
         """(hour, minute) for a new game (2026-11-25, owner: spread the turn passes of games over the night so they do not all reach the
         AI Master at once). Slots of TURN_CLOSE_WINDOW (Madrid time, both hours included) in order of preference: full hours, then half hours,
-        then quarter hours. The least used slot among active games wins, the earlier in that order on a tie: full hours fill first, half
+        then quarter hours, latest first in each group (06:00, 05:00 ... 02:00, then 05:30 ... 02:30, then 05:45, 05:15 ...). The least used slot among active games wins, the earlier in that order on a tie: full hours fill first, half
         hours only once every full hour has a game, quarters only once every half hour has one."""
         start, end = config.TURN_CLOSE_WINDOW
-        slots = [(h, 0) for h in range(start, end + 1)]
-        slots += [(h, 30) for h in range(start, end)]
-        slots += [(h, m) for h in range(start, end) for m in (15, 45)]
+        slots = [(h, 0) for h in range(end, start - 1, -1)]  # owner: latest first, the end of the night is the least busy
+        slots += [(h, 30) for h in range(end - 1, start - 1, -1)]
+        slots += [(h, m) for h in range(end - 1, start - 1, -1) for m in (45, 15)]
         used = {s_: 0 for s_ in slots}
         try:
             for g in ws.find("game", phase="active") + ws.find("game", phase="characters"):

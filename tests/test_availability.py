@@ -61,9 +61,9 @@ def test_close_slots_full_hours_then_half_then_quarters(world):
         gid, _ = start_solo(eng)
         g, _ = store.get("game", gid)
         seen.append((g["settings"]["turn_close_hour"], g["settings"]["turn_close_minute"]))
-    assert seen[:5] == [(2, 0), (3, 0), (4, 0), (5, 0), (6, 0)]
-    assert seen[5:9] == [(2, 30), (3, 30), (4, 30), (5, 30)]
-    assert seen[9:11] == [(2, 15), (2, 45)]
+    assert seen[:5] == [(6, 0), (5, 0), (4, 0), (3, 0), (2, 0)]        # latest first: the end of the night is the least busy
+    assert seen[5:9] == [(5, 30), (4, 30), (3, 30), (2, 30)]
+    assert seen[9:11] == [(5, 45), (5, 15)]
     slots = eng._suggest_close_slot.__doc__
     assert "full hours" in slots
 
