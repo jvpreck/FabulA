@@ -59,7 +59,7 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-03-019-Pending** An AI Master answer that is malformed but whose meaning is clear (a missing key, a number sent as text, a character named by id instead of name) is repaired by the server. Only an answer that cannot be understood is rejected. Repairs and rejections are counted per request kind (see 08-006).
 - **TLR-03-020-Pending** When an action cannot be resolved after the retries, the player does not receive a bare error. The action is queued for the turn close as in 03-009 and the answer says so. The same request id returns the same outcome when sent again, without running the AI Master again.
 - **TLR-03-021-Pending** Requests that need no judgment (pause, resume, standing orders, thread notes, ready, a decision on a prompt) are handled by the engine without the AI Master and work while it is unavailable.
-- **TLR-03-022-Pending** When every strong model fails, the turn close falls back to the light models (see 03-005) and retries on a schedule. The client is told when the next retry is, and a turn queued by an outage is resolved as soon as any model answers, not only at its deadline.
+- **TLR-03-022** When every strong model fails, the turn close falls back to the light models (see 03-005) and retries on a schedule. The client is told when the next retry is, and a turn queued by an outage is resolved as soon as any model answers, not only at its deadline.
 - **TLR-03-023-Pending** Every answer carries the time spent in the engine, in the AI Master and in pictures, so clients and the host can see where time goes.
 
 ## 04. Characters
