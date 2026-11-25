@@ -114,7 +114,7 @@ PROBE_MIN_SECONDS = int(os.environ.get("PROBE_MIN_SECONDS", "150"))  # server/pr
 TURN_RETRY_FIRST_MINUTES = int(os.environ.get("TURN_RETRY_FIRST_MINUTES", "5"))
 TURN_RETRY_MAX_MINUTES = int(os.environ.get("TURN_RETRY_MAX_MINUTES", "60"))
 # 2026-11-25 (owner): turns of whole days close in a window of the night (Madrid time), both hours included (02:00 to 06:00). Each new game is
-# offered the least used slot: full hours first (2, 3, 4, 5, 6), then half hours (2:30 to 5:30), then quarters (2:15, 2:45 ... 5:45).
+# offered the least used slot: full hours first (6, 5, 4, 3, 2), then half hours (5:30 down to 2:30), then quarters (5:45, 5:15 ... 2:15).
 TURN_CLOSE_WINDOW = (int(os.environ.get("TURN_CLOSE_WINDOW_START_HOUR", "2")), int(os.environ.get("TURN_CLOSE_WINDOW_END_HOUR", "6")))
 GEMINI_STRUCTURED_OUTPUT = os.environ.get("GEMINI_STRUCTURED_OUTPUT", "off").lower() in ("on", "1", "true", "yes")  # the provider enforces the response schema (server/schema.py)
 GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "100"))  # one model call must never outlive the function
