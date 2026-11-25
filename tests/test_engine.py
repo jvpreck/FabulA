@@ -778,7 +778,7 @@ def test_new_games_are_spread_over_the_night_slots(world):
     start_solo(eng)
     out = new_game(eng, "p_ana")
     g, _ = store.get("game", out["game_id"])
-    assert (g["settings"]["turn_close_hour"], g["settings"]["turn_close_minute"]) == (2, 15)
+    assert (g["settings"]["turn_close_hour"], g["settings"]["turn_close_minute"]) == (3, 0)
     s = {"turn_interval_hours": 24, "turn_close_hour": 4, "turn_close_minute": 45, "turn_timezone": "Europe/Madrid"}
     t0 = datetime(2026, 7, 1, 10, tzinfo=timezone.utc)
     assert Engine._turn_closes(t0, s) == datetime(2026, 7, 2, 2, 45, tzinfo=timezone.utc)  # 04:45 Madrid in summer

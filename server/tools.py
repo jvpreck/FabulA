@@ -139,7 +139,7 @@ def register(mcp, engine: Engine):
         """Start a new game run from an adventure. Returns a work package that collects the settings (lethality low, moderate or high; the default is high,
         turn interval, the hour of the day a turn closes, pvp, language, visibility private or open) with the player; then send the result with submit_package.
         turn_close_hour is 0 to 23 (hour of the day in turn_timezone, default Europe/Madrid, at which a turn of whole days closes; by default the server
-        proposes a slot between 02:00 and 06:00 so that games do not all close at once) or -1 for no fixed hour; turn_close_minute 0 to 59 is the minute
+        proposes a slot between 02:00 and 06:00 (full hours first, then half and quarter hours) so that games do not all close at once) or -1 for no fixed hour; turn_close_minute 0 to 59 is the minute
         of that hour. Optional arguments prefill defaults."""
         s = {k: v for k, v in {"lethality": lethality, "turn_interval_hours": turn_interval_hours or None,
                                "turn_span": turn_span, "pvp": pvp, "visibility": visibility,

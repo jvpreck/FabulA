@@ -54,16 +54,18 @@ def test_the_retry_pause_is_capped(world):
     assert store.get("usage", eng.RETRY_KEY)[0]["games"]["g_x"]["tries"] == 1
 
 
-def test_close_slots_fill_the_window_in_order(world):
+def test_close_slots_full_hours_then_half_then_quarters(world):
     eng, store, gm, clock = world
     seen = []
-    for _ in range(3):
+    for _ in range(11):
         gid, _ = start_solo(eng)
         g, _ = store.get("game", gid)
         seen.append((g["settings"]["turn_close_hour"], g["settings"]["turn_close_minute"]))
-    assert seen == [(2, 0), (2, 15), (2, 30)]
-    start, end = config.TURN_CLOSE_WINDOW
-    assert all(start <= h < end for h, _ in seen)
+    assert seen[:5] == [(2, 0), (3, 0), (4, 0), (5, 0), (6, 0)]
+    assert seen[5:9] == [(2, 30), (3, 30), (4, 30), (5, 30)]
+    assert seen[9:11] == [(2, 15), (2, 45)]
+    slots = eng._suggest_close_slot.__doc__
+    assert "full hours" in slots
 
 
 def test_probe_queue_kinds(monkeypatch):

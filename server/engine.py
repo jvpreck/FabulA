@@ -566,12 +566,14 @@ class Engine:
         return closes.astimezone(timezone.utc)
 
     def _suggest_close_slot(self, ws):
-        """(hour, minute) for a new game: the least used slot of TURN_CLOSE_WINDOW (Madrid time, steps of TURN_CLOSE_SLOT_MINUTES) among the
-        active games that close at a fixed hour, earliest first on a tie (2026-11-25, owner: spread the turn passes of party games over the night,
-        so they do not all reach the AI Master in the same minute)."""
+        """(hour, minute) for a new game (2026-11-25, owner: spread the turn passes of games over the night so they do not all reach the
+        AI Master at once). Slots of TURN_CLOSE_WINDOW (Madrid time, both hours included) in order of preference: full hours, then half hours,
+        then quarter hours. The least used slot among active games wins, the earlier in that order on a tie: full hours fill first, half
+        hours only once every full hour has a game, quarters only once every half hour has one."""
         start, end = config.TURN_CLOSE_WINDOW
-        step = max(1, config.TURN_CLOSE_SLOT_MINUTES)
-        slots = [(h, m) for h in range(start, end) for m in range(0, 60, step)]
+        slots = [(h, 0) for h in range(start, end + 1)]
+        slots += [(h, 30) for h in range(start, end)]
+        slots += [(h, m) for h in range(start, end) for m in (15, 45)]
         used = {s_: 0 for s_ in slots}
         try:
             for g in ws.find("game", phase="active") + ws.find("game", phase="characters"):
@@ -581,7 +583,7 @@ class Engine:
                     used[key] += 1
         except Exception:
             pass
-        return min(slots, key=lambda s_: (used[s_], s_)) if slots else (config.TURN_CLOSE_HOUR, 0)
+        return min(slots, key=lambda s_: (used[s_], slots.index(s_))) if slots else (config.TURN_CLOSE_HOUR, 0)
 
     # 2026-11-25 (owner): a turn close that failed because the AI Master did not answer is retried by the scheduler (gm_usage record
     # retry:turns), first after TURN_RETRY_FIRST_MINUTES, then with doubling pauses up to TURN_RETRY_MAX_MINUTES, not only at the deadline.
