@@ -347,6 +347,7 @@ The ruleset gives the mechanics for contests and arbitration. The workflow is:
 **Solo.**
 - One viewpoint. Every thread is the character's. No cutaways.
 - With `early_close` on, the turn closes when the player has used the Blocks they intend, so the game moves at the player's pace. Every action is effectively resolved at once.
+- A solo turn has no deadline (`clock.turn_closes` is null): it never passes by itself, only when the player acts or says they are ready. The world does not move while the player is away.
 - Allies advise and assist. The character decides. A GM-run ally never rolls for the player and never solves a problem the player has not engaged.
 - Use the spare attention to deepen NPCs and consequences, not to add filler.
 

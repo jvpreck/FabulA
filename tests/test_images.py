@@ -259,6 +259,8 @@ def test_deleting_a_game_deletes_its_pictures(world):
 def test_scheduler_draws_pictures_after_resolving(world):
     eng, store, prov, storage, clock = world
     gid, cid = start(eng, "p_a")
+    from test_engine import make_party
+    make_party(eng, gid)  # a solo game has no deadline
     clock.t += timedelta(days=2)
     out = eng.resolve_due()
     assert out["images"]["generated"] == 2 and len(storage.files) == 5

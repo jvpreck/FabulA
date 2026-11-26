@@ -32,7 +32,12 @@ def test_time_gives_the_seconds_left_and_the_blocks_left(silent):
     eng, store, gid, cid, calls = silent
     game, _ = store.get("game", gid)
     a = eng.submit_action("p_jorge", gid, "free_query", "", cid, {"topic": "time"})["answer"]
-    assert a["turn"] == 1 and a["turn_closes"] == game["clock"]["turn_closes"] and a["seconds_left"] > 0
+    assert a["turn"] == 1 and a["turn_closes"] is None and a["seconds_left"] is None   # solo: no deadline (2026-11-26)
+    from test_engine import make_party
+    make_party(eng, gid)
+    game, _ = store.get("game", gid)
+    a = eng.submit_action("p_jorge", gid, "free_query", "", cid, {"topic": "time"})["answer"]
+    assert a["turn_closes"] == game["clock"]["turn_closes"] and a["seconds_left"] > 0
     assert a["blocks_left"] == 4 and a["blocks_used"] == []
 
 
