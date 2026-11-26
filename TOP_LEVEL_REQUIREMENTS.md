@@ -12,7 +12,7 @@ Requirements state what the engine must do, not how. Each has an ID so other doc
 - **TLR-01-001** The engine runs asynchronous tabletop RPG games with an AI Master, for 1 to N players, solo included.
 - **TLR-01-002** Players act whenever they like. They never have to be online at the same time.
 - **TLR-01-003** The world advances in turns. When a turn closes, the AI Master resolves all queued actions together and arbitrates conflicts.
-- **TLR-01-004** The turn length is set at game setup (default 24 hours). The closing hour and time zone are also configurable (default 03:00, Spain time). Solo games may close the turn as soon as the player has acted.
+- **TLR-01-004** The turn length is set at game setup (default 24 hours). The closing hour and time zone are also configurable (default 03:00, Spain time). Solo games may close the turn as soon as the player has acted. In a solo game the turn never passes by itself: it has no deadline and passes only on the player's request (an action that needs the AI Master, or ready); party games keep the deadline (owner, 2026-11-26).
 - **TLR-01-005** Minor actions that affect only one character resolve immediately. Characters in the same place can talk instantly, without waiting for a turn.
 - **TLR-01-006** Lethality (low, moderate or high) is set per game. A player whose character dies can continue with a new character, a pregenerated one or an available NPC.
 - **TLR-01-007-Pending** Every player request is answered at one of four levels: (1) local in the client, (2) by the engine from the database, (3) by the AI Master immediately, (4) by the AI Master at the turn close.

@@ -159,6 +159,12 @@ class Engine:
     def _span_blocks(self, game):
         return config.SPAN_BLOCKS.get((game.get("settings") or {}).get("turn_span", "day"), 4)
 
+    @staticmethod
+    def _solo(game):
+        """2026-11-26 (owner): a solo game has no turn deadline. Its turn passes only on the player's request (an action that needs the AI Master,
+        or `ready`), never by itself. Party games keep the deadline (default 24 hours)."""
+        return game.get("format") == "solo"
+
     def _early_close(self, game):
         v = (game.get("settings") or {}).get("early_close")
         return (game.get("format") == "solo") if v is None else bool(v)
@@ -577,6 +583,8 @@ class Engine:
         used = {s_: 0 for s_ in slots}
         try:
             for g in ws.find("game", phase="active") + ws.find("game", phase="characters"):
+                if self._solo(g):
+                    continue  # no turn deadline: it does not use a slot
                 st = g.get("settings") or {}
                 key = (st.get("turn_close_hour"), st.get("turn_close_minute") or 0)
                 if key in used:
@@ -621,13 +629,13 @@ class Engine:
     def _open_turn(self, ws, game, n):
         s = game["settings"]
         opens = self.now()
-        closes = self._turn_closes(opens, s)
+        closes = None if self._solo(game) else self._turn_closes(opens, s)
         game["clock"]["turn"] = n
         game["clock"]["turn_opens"] = iso(opens)
-        game["clock"]["turn_closes"] = iso(closes)
+        game["clock"]["turn_closes"] = iso(closes) if closes else None
         if not any(t["n"] == n for t in game["turns"]):
             game["turns"].append({"n": n, "status": "open", "span": s.get("turn_span", "day"), "day": game["clock"].get("day"),
-                                  "block_start": game["clock"].get("block"), "opens_at": iso(opens), "closes_at": iso(closes),
+                                  "block_start": game["clock"].get("block"), "opens_at": iso(opens), "closes_at": iso(closes) if closes else None,
                                   "resolved_at": None, "shared_digest": [], "results": {}, "dice_log": []})
         chars = ws.load_game_characters(game["id"])
         actions = {c["id"]: [] for c in chars if c.get("is_alive", True) and c.get("status") in ("active", "npc_controlled", "sidelined")}
@@ -727,7 +735,7 @@ class Engine:
                             "turn_closes": (g.get("clock") or {}).get("turn_closes"),
                             "message": "Tell the player: the AI Master (Google Gemini, or the OpenRouter fallback) could not resolve the current turn at the last attempt (`last_attempt`, "
                                        "`last_reason`). Nothing is lost. It is tried again automatically at `next_retry` "
-                                       "(the pauses grow up to an hour) and at the latest when the turn closes (`turn_closes`); the player can ask for it sooner by sending `ready` false then true. For the current "
+                                       "(the pauses grow up to an hour) and at the latest when the turn closes (`turn_closes`; null in a solo game, which has no deadline: the retries go on until it answers); the player can ask for it sooner by sending `ready` false then true. For the current "
                                        "state of every model, ask the level 2 topic `ai_status`."})
         return out
 
@@ -2024,8 +2032,9 @@ class Engine:
                 extra["turn_resolved"] = False
                 extra["message"] = self._ready_but_not_closed(game)
         elif want:
-            extra["message"] = (f"Recorded: your character is ready to pass the turn ({summary['ready']} of {summary['active']} players). The turn closes when all are ready, "
-                                f"or at {game['clock'].get('turn_closes')}. You can still ask questions; to act again send ready with {{\"ready\": false}}.")
+            extra["message"] = (f"Recorded: your character is ready to pass the turn ({summary['ready']} of {summary['active']} players). The turn closes when all are ready"
+                                + (f", or at {game['clock'].get('turn_closes')}" if game['clock'].get('turn_closes') else "")
+                                + ". You can still ask questions; to act again send ready with {\"ready\": false}.")
         else:
             extra["message"] = "Withdrawn: the character is no longer ready, so it can act again in this turn."
         ws = self._ws()
@@ -2033,8 +2042,9 @@ class Engine:
 
     @staticmethod
     def _ready_but_not_closed(game):
-        return ("Everyone is ready, but the AI Master could not be reached to close the turn. Nothing is lost: it closes as soon as it can, "
-                f"and at the latest at {game['clock'].get('turn_closes')}.")
+        closes = game["clock"].get("turn_closes")
+        return ("Everyone is ready, but the AI Master could not be reached to close the turn. Nothing is lost: it closes as soon as it can"
+                + (f", and at the latest at {closes}." if closes else " (the server keeps trying)."))
 
     # ---- TLR-01-013: no setup phase. The game is created by one action and a character by one action; the server confirms a character whose
     # validation passed and starts the game itself when every player who joined (and as many as the host expects) has a confirmed character.
@@ -2181,6 +2191,9 @@ class Engine:
     DEFERRED_MESSAGE = ("The AI Master could not answer right now ({why}), so the action was saved as written and will be resolved at the turn close, "
                         "together with the other players' actions. Nothing was lost. Tell the player that, and when the turn closes.")
 
+    DEFERRED_MESSAGE_SOLO = ("The AI Master could not answer right now ({why}), so the action was saved as written. Nothing was lost. The server tries "
+                             "again by itself every few minutes (the pauses grow up to an hour) and resolves it as soon as the AI Master answers. Tell the player that.")
+
     def _defer_action(self, player_id, game_id, character_id, text, error):
         ws = self._ws()
         game = self._game(ws, game_id)
@@ -2204,6 +2217,9 @@ class Engine:
         why = "its request quota is used up for now" if isinstance(error, AIMasterBusy) else "Gemini is not answering"
         extra = {"handling": "queued", "deferred": True, "turn_closes_at": game["clock"].get("turn_closes"),
                  "message": self.DEFERRED_MESSAGE.format(why=why)}
+        if self._solo(game):  # no deadline: the scheduler resolves the turn as soon as the AI Master answers again
+            self._retry_mark(game_id, turn)
+            extra["message"] = self.DEFERRED_MESSAGE_SOLO.format(why=why)
         return self._finish(self._ws(), player_id, game_id, extra)
 
     def _post_intake(self, kind, text, cid):
@@ -2420,10 +2436,31 @@ class Engine:
         ws2.commit()
         return {"game_id": game_id, "resolved": True, "turn": n, "phase": self._game(self._ws(), game_id)["phase"]}
 
+    def _drop_solo_deadline(self, game_id):
+        """True for a solo game: its turn never closes by the deadline (2026-11-26, owner). A turn opened before that rule still has a
+        deadline; it is removed here, so the game leaves the due list."""
+        try:
+            ws = self._ws()
+            game = ws.get("game", game_id)
+            if not game or not self._solo(game):
+                return False
+            if (game.get("clock") or {}).get("turn_closes"):
+                game["clock"]["turn_closes"] = None
+                n = game["clock"].get("turn")
+                for ent in game.get("turns", []):
+                    if ent.get("n") == n:
+                        ent["closes_at"] = None
+                ws.touch("game", game_id)
+                ws.commit()
+            return True
+        except Exception:
+            return False
+
     def resolve_due(self):
         started = time.monotonic()
-        ids = self.store.due_games(iso(self.now()))
-        ids = list(ids) + [g for g in self._retry_due() if g not in ids]  # failed early closes, retried before their deadline
+        retry = self._retry_due()
+        ids = [g for g in self.store.due_games(iso(self.now())) if g in retry or not self._drop_solo_deadline(g)]
+        ids += [g for g in retry if g not in ids]  # failed early closes, retried before their deadline
         out = []
         for gid in ids:
             if time.monotonic() - started > config.FUNCTION_BUDGET_SECONDS - config.TURN_RESERVE_SECONDS:

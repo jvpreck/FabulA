@@ -57,8 +57,10 @@ def test_the_retry_pause_is_capped(world):
 def test_close_slots_full_hours_then_half_then_quarters(world):
     eng, store, gm, clock = world
     seen = []
+    from test_engine import make_party
     for _ in range(11):
         gid, _ = start_solo(eng)
+        make_party(eng, gid)  # solo games take no slot
         g, _ = store.get("game", gid)
         seen.append((g["settings"]["turn_close_hour"], g["settings"]["turn_close_minute"]))
     assert seen[:5] == [(6, 0), (5, 0), (4, 0), (3, 0), (2, 0)]        # latest first: the end of the night is the least busy

@@ -123,6 +123,16 @@ def game_pkg(**kw):
     return d
 
 
+def make_party(eng, gid):
+    """Turn a test game into a party game (they start solo with one player), so its turn has a deadline again."""
+    ws = eng._ws()
+    game = ws.get("game", gid)
+    game["format"] = "party"
+    eng._open_turn(ws, game, game["clock"]["turn"])
+    ws.touch("game", gid)
+    ws.commit()
+
+
 def new_game(eng, player, adv=ADV, language=None, settings=None):
     """create_game starts a work package; the client answers it with submit_package."""
     out = eng.create_game(player, adv, language=language, settings=settings)
@@ -635,6 +645,7 @@ def test_resolve_due_defers_turns_when_time_is_short(world, monkeypatch):
     gid = out["game_id"]
     a = eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_pc")["deliveries"][0]["character_id"]
     eng.submit_action("p_jorge", gid, "character_confirm", "", a, {})
+    make_party(eng, gid)  # a solo game has no deadline
     clock["t"] += timedelta(hours=25)
     monkeypatch.setattr(config, "TURN_RESERVE_SECONDS", config.FUNCTION_BUDGET_SECONDS + 1)
     out = eng.resolve_due()
@@ -765,6 +776,7 @@ def test_turn_closing_hour_defaults_to_3am_madrid_and_is_configurable():
 def test_game_creation_takes_the_closing_hour(world):
     eng, store, gm, clock = world
     gid, cid = start_solo(eng)
+    make_party(eng, gid)
     g, _ = store.get("game", gid)
     # 2026-11-25: the first game gets the first slot of the night window (06:00 Madrid, latest first)
     assert (g["settings"]["turn_close_hour"], g["settings"].get("turn_close_minute", 0)) == (6, 0) and g["settings"]["turn_timezone"] == "Europe/Madrid"
@@ -775,7 +787,7 @@ def test_game_creation_takes_the_closing_hour(world):
 
 def test_new_games_are_spread_over_the_night_slots(world):
     eng, store, gm, clock = world
-    start_solo(eng)
+    make_party(eng, start_solo(eng)[0])  # a solo game has no deadline and takes no slot
     out = new_game(eng, "p_ana")
     g, _ = store.get("game", out["game_id"])
     assert (g["settings"]["turn_close_hour"], g["settings"]["turn_close_minute"]) == (5, 0)
@@ -829,3 +841,46 @@ def test_a_stray_draft_does_not_make_a_pregenerated_character_look_taken(world):
     assert eng.generate_character("p_jorge", gid, "pregen", pregen_id="pregen_test_pc")             # not refused
     env = gm.calls[-1][1]
     assert all(c["id"] != "c_stray" for c in env["characters"])                                          # and the Master never sees it
+
+
+# ---------------------------------------------------------------- 2026-11-26 (owner): solo games have no turn deadline
+def test_a_solo_turn_never_closes_by_itself(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    g, _ = store.get("game", gid)
+    assert g["format"] == "solo" and g["clock"]["turn_closes"] is None
+    n = g["clock"]["turn"]
+    clock["t"] += timedelta(days=10)
+    assert eng.resolve_due()["checked"] == 0
+    g, _ = store.get("game", gid)
+    assert g["clock"]["turn"] == n                                   # nothing passed by itself
+    out = eng.submit_action("p_jorge", gid, "ready", "", cid, {"ready": True})
+    g, _ = store.get("game", gid)
+    assert g["clock"]["turn"] == n + 1 and g["clock"]["turn_closes"] is None   # the player's request passes it
+
+
+def test_a_solo_turn_opened_with_a_deadline_loses_it(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    ws = eng._ws()
+    game = ws.get("game", gid)
+    game["clock"]["turn_closes"] = "2026-11-02T05:00:00Z"            # a turn opened before the rule
+    ws.touch("game", gid)
+    ws.commit()
+    clock["t"] += timedelta(days=2)
+    assert eng.resolve_due()["checked"] == 0
+    g, _ = store.get("game", gid)
+    assert g["clock"]["turn_closes"] is None and g["turns"][-1]["status"] == "open"
+
+
+def test_a_party_turn_still_closes_at_its_deadline(world):
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    make_party(eng, gid)
+    g, _ = store.get("game", gid)
+    n = g["clock"]["turn"]
+    assert g["clock"]["turn_closes"]
+    clock["t"] += timedelta(days=2)
+    assert eng.resolve_due()["results"][0]["resolved"] is True
+    g, _ = store.get("game", gid)
+    assert g["clock"]["turn"] == n + 1 and g["clock"]["turn_closes"]

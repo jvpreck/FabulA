@@ -98,3 +98,21 @@ def test_a_normal_action_is_unchanged(world):
     assert out["handling"] == "resolved_turn" and "deferred" not in out  # a solo game closes its turn at once
     sa, _ = store.get("submit_action", f"{gid}:1")
     assert sa["actions"][cid][0]["parsed"] and "needs_parse" not in sa["actions"][cid][0]
+
+
+def test_a_deferred_solo_action_is_retried_by_the_scheduler_without_a_deadline(world):
+    """2026-11-26: a solo game has no deadline, so a deferred action is put on the retry list and resolved once the AI Master answers."""
+    from datetime import timedelta
+    from server import config
+    eng, store, gm, clock = world
+    gid, cid = start_solo(eng)
+    real = gm.call
+    gm.call = down(GMUnavailable("503"))
+    out = eng.submit_action("p_jorge", gid, "action", "I will visit Tom in the afternoon.", cid)
+    assert out["deferred"] is True and out["turn_closes_at"] is None and "tries again by itself" in out["message"]
+    doc, _ = store.get("usage", eng.RETRY_KEY)
+    assert gid in doc["games"]
+    gm.call = real
+    clock["t"] += timedelta(minutes=config.TURN_RETRY_FIRST_MINUTES + 1)
+    res = eng.resolve_due()
+    assert res["checked"] == 1 and res["results"][0]["resolved"] is True
